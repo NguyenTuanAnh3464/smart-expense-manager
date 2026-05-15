@@ -129,9 +129,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (var item in transactions) {
       if (item["type"] == "income") {
-        total += item["amount"];
+        total += (item["amount"] as num).toDouble();
       } else {
-        total -= item["amount"];
+        total -= (item["amount"] as num).toDouble();
       }
     }
 
@@ -142,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
     double total = 0;
     for (var item in transactions) {
       if (item["type"] == "income") {
-        total += item["amount"];
+        total += (item["amount"] as num).toDouble();
       }
     }
     return total;
@@ -152,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
     double total = 0;
     for (var item in transactions) {
       if (item["type"] == "expense") {
-        total += item["amount"];
+        total += (item["amount"] as num).toDouble();
       }
     }
     return total;
@@ -494,7 +494,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             Text(
-                              "${isIncome ? "+" : "-"}${formatMoney(item["amount"])}",
+                              "${isIncome ? "+" : "-"}${formatMoney((item["amount"] as num).toDouble())}",
                               style: TextStyle(
                                 color: isIncome ? Colors.green : Colors.red,
                                 fontWeight: FontWeight.bold,
