@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "97111363348",
+    "project_id": "smart-expense-manager-2253e",
+    "storage_bucket": "smart-expense-manager-2253e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97111363348:android:b16da87f22763254b23c01",
+        "android_client_info": {
+          "package_name": "com.example.smart_expense_manager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBdwh8pJoCXb0LbVREo12ux5JJ6gpDAZg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
