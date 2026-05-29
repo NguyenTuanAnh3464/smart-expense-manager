@@ -67,6 +67,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             AddTransactionScreen(type: "expense", initialDate: selectedDate),
       ),
     );
+    if (!context.mounted) return;
 
     if (result == null) return;
 
@@ -82,6 +83,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ...result,
       "userId": user.uid,
     });
+    if (!context.mounted) return;
   }
 
   Future<void> editTransaction(Map<String, dynamic> transaction) async {
@@ -97,6 +99,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
     );
+    if (!context.mounted) return;
 
     if (result == null) return;
 
@@ -112,6 +115,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         .collection("transactions")
         .doc(transaction["id"])
         .update({...result, "userId": user.uid});
+    if (!context.mounted) return;
   }
 
   Future<void> confirmDeleteTransaction(
@@ -136,6 +140,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         );
       },
     );
+    if (!context.mounted) return;
 
     if (shouldDelete != true) return;
 
@@ -143,6 +148,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         .collection("transactions")
         .doc(transaction["id"])
         .delete();
+    if (!context.mounted) return;
   }
 
   @override

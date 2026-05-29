@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'budget_screen.dart';
 import 'calendar_screen.dart';
 import 'home_screen.dart';
 import 'report_screen.dart';
@@ -19,6 +20,7 @@ class _MainNavigationState extends State<MainNavigation> {
     HomeScreen(),
     CalendarScreen(),
     ReportScreen(),
+    BudgetScreen(),
     AccountPage(),
   ];
 
@@ -48,6 +50,10 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
             label: 'Báo cáo',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet),
+            label: 'Ngân sách',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Tài khoản'),
         ],

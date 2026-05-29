@@ -147,6 +147,7 @@ class _ReportScreenState extends State<ReportScreen> {
         ),
       ),
     );
+    if (!context.mounted) return;
 
     if (result == null) return;
 
@@ -154,6 +155,7 @@ class _ReportScreenState extends State<ReportScreen> {
         .collection("transactions")
         .doc(transaction["id"])
         .update({...result, "userId": user.uid});
+    if (!context.mounted) return;
   }
 
   void showCategoryDetails(_CategoryReport report) {
@@ -241,6 +243,7 @@ class _ReportScreenState extends State<ReportScreen> {
                             onTap: () async {
                               Navigator.pop(context);
                               await editTransaction(item);
+                              if (!this.context.mounted) return;
                             },
                             leading: Icon(
                               categoryIcon(item["category"].toString()),
