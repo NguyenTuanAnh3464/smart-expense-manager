@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'login_screen.dart';
 import 'main_navigation.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -33,27 +32,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
         isLoading = true;
       });
 
-      final credential =
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
-      );
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: emailController.text.trim(),
+            password: passwordController.text.trim(),
+          );
 
-      await credential.user?.updateDisplayName(
-        fullNameController.text.trim(),
-      );
+      await credential.user?.updateDisplayName(fullNameController.text.trim());
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Đăng ký thành công")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Đăng ký thành công")));
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => const MainNavigation(),
-        ),
+        MaterialPageRoute(builder: (context) => const MainNavigation()),
       );
     } on FirebaseAuthException catch (e) {
       String message = "Đăng ký thất bại";
@@ -66,9 +61,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         message = "Email không hợp lệ";
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -154,9 +149,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
-                      "Register",
-                      style: TextStyle(color: Colors.white, fontSize: 18),
-                    ),
+                            "Register",
+                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          ),
                   ),
                 ),
 

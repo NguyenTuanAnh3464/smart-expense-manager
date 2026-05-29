@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 class AddTransactionScreen extends StatefulWidget {
   final String type;
   final Map<String, dynamic>? transaction;
-
+  final DateTime? initialDate;
 
   const AddTransactionScreen({
     super.key,
     required this.type,
     this.transaction,
+    this.initialDate,
   });
 
   @override
@@ -16,110 +17,63 @@ class AddTransactionScreen extends StatefulWidget {
 }
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
+  static const Color primaryGreen = Color(0xFF168A36);
+  static const Color softGreen = Color(0xFFEAF7EE);
+
   late String selectedType;
 
   String selectedCategory = "Ăn uống";
 
   DateTime selectedDate = DateTime.now();
 
-  final TextEditingController amountController =
-  TextEditingController();
+  final TextEditingController amountController = TextEditingController();
 
-  final TextEditingController noteController =
-  TextEditingController();
+  final TextEditingController noteController = TextEditingController();
 
   final List<Map<String, dynamic>> expenseCategories = [
-    {
-      "name": "Ăn uống",
-      "icon": Icons.restaurant,
-      "color": Colors.orange
-    },
+    {"name": "Ăn uống", "icon": Icons.restaurant, "color": Colors.orange},
 
     {
       "name": "Đi lại",
       "icon": Icons.directions_bus,
-      "color": Colors.deepOrange
+      "color": Colors.deepOrange,
     },
 
-    {
-      "name": "Quần áo",
-      "icon": Icons.checkroom,
-      "color": Colors.blue
-    },
+    {"name": "Quần áo", "icon": Icons.checkroom, "color": Colors.blue},
 
-    {
-      "name": "Mỹ phẩm",
-      "icon": Icons.brush,
-      "color": Colors.pink
-    },
+    {"name": "Mỹ phẩm", "icon": Icons.brush, "color": Colors.pink},
 
-    {
-      "name": "Y tế",
-      "icon": Icons.local_hospital,
-      "color": Colors.green
-    },
+    {"name": "Y tế", "icon": Icons.local_hospital, "color": Colors.green},
 
-    {
-      "name": "Giáo dục",
-      "icon": Icons.school,
-      "color": Colors.red
-    },
+    {"name": "Giáo dục", "icon": Icons.school, "color": Colors.red},
 
-    {
-      "name": "Tiền điện",
-      "icon": Icons.flash_on,
-      "color": Colors.amber
-    },
+    {"name": "Tiền điện", "icon": Icons.flash_on, "color": Colors.amber},
 
-    {
-      "name": "Tiền nhà",
-      "icon": Icons.home,
-      "color": Colors.brown
-    },
+    {"name": "Tiền nhà", "icon": Icons.home, "color": Colors.brown},
 
-    {
-      "name": "Khác",
-      "icon": Icons.more_horiz,
-      "color": Colors.grey
-    },
+    {"name": "Khác", "icon": Icons.more_horiz, "color": Colors.grey},
   ];
 
   final List<Map<String, dynamic>> incomeCategories = [
     {
       "name": "Tiền lương",
       "icon": Icons.account_balance_wallet,
-      "color": Colors.green
+      "color": Colors.green,
     },
 
-    {
-      "name": "Tiền phụ cấp",
-      "icon": Icons.savings,
-      "color": Colors.orange
-    },
+    {"name": "Tiền phụ cấp", "icon": Icons.savings, "color": Colors.orange},
 
-    {
-      "name": "Tiền thưởng",
-      "icon": Icons.card_giftcard,
-      "color": Colors.red
-    },
+    {"name": "Tiền thưởng", "icon": Icons.card_giftcard, "color": Colors.red},
 
     {
       "name": "Thu nhập phụ",
       "icon": Icons.monetization_on,
-      "color": Colors.blue
+      "color": Colors.blue,
     },
 
-    {
-      "name": "Đầu tư",
-      "icon": Icons.trending_up,
-      "color": Colors.teal
-    },
+    {"name": "Đầu tư", "icon": Icons.trending_up, "color": Colors.teal},
 
-    {
-      "name": "Khác",
-      "icon": Icons.more_horiz,
-      "color": Colors.grey
-    },
+    {"name": "Khác", "icon": Icons.more_horiz, "color": Colors.grey},
   ];
 
   @override
@@ -135,18 +89,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     } else {
       selectedType = widget.type;
       selectedCategory = selectedType == "income" ? "Tiền lương" : "Ăn uống";
+      if (widget.initialDate != null) {
+        selectedDate = widget.initialDate!;
+      }
     }
   }
 
   List<Map<String, dynamic>> get currentCategories {
-    return selectedType == "income"
-        ? incomeCategories
-        : expenseCategories;
+    return selectedType == "income" ? incomeCategories : expenseCategories;
   }
 
   Future<void> pickDate() async {
-    final DateTime? pickedDate =
-    await showDatePicker(
+    final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: selectedDate,
       firstDate: DateTime(2020),
@@ -164,10 +118,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     setState(() {
       selectedType = type;
 
-      selectedCategory =
-      type == "income"
-          ? "Tiền lương"
-          : "Ăn uống";
+      selectedCategory = type == "income" ? "Tiền lương" : "Ăn uống";
     });
   }
 
@@ -176,61 +127,42 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     bool isIncome = selectedType == "income";
 
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: softGreen,
 
       appBar: AppBar(
-        backgroundColor: Colors.green,
+        backgroundColor: primaryGreen,
         elevation: 0,
 
-        iconTheme:
-        const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
 
-        title: const Text(
-          "Thêm giao dịch",
+        title: Text(
+          widget.transaction == null ? "Thêm giao dịch" : "Sửa giao dịch",
 
-          style: TextStyle(
-            color: Colors.white,
-          ),
+          style: const TextStyle(color: Colors.white),
         ),
       ),
 
       body: SingleChildScrollView(
         child: Column(
           children: [
-
             const SizedBox(height: 10),
 
             Container(
-              margin:
-              const EdgeInsets.symmetric(
-                horizontal: 24,
-              ),
+              margin: const EdgeInsets.symmetric(horizontal: 24),
 
               padding: const EdgeInsets.all(4),
 
               decoration: BoxDecoration(
                 color: Colors.white,
 
-                borderRadius:
-                BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12),
               ),
 
               child: Row(
                 children: [
+                  Expanded(child: typeButton("expense", "Tiền chi")),
 
-                  Expanded(
-                    child: typeButton(
-                      "expense",
-                      "Tiền chi",
-                    ),
-                  ),
-
-                  Expanded(
-                    child: typeButton(
-                      "income",
-                      "Tiền thu",
-                    ),
-                  ),
+                  Expanded(child: typeButton("income", "Tiền thu")),
                 ],
               ),
             ),
@@ -244,7 +176,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
               child: Column(
                 children: [
-
                   rowItem(
                     title: "Ngày",
 
@@ -257,94 +188,60 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         style: const TextStyle(
                           color: Colors.black87,
                           fontSize: 22,
-                          fontWeight:
-                          FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ),
 
-                  const Divider(
-                    color: Colors.black12,
-                  ),
+                  const Divider(color: Colors.black12),
 
                   rowItem(
                     title: "Ghi chú",
 
                     child: TextField(
-                      controller:
-                      noteController,
+                      controller: noteController,
 
-                      style:
-                      const TextStyle(
-                        color:
-                        Colors.black87,
-                      ),
+                      style: const TextStyle(color: Colors.black87),
 
-                      decoration:
-                      const InputDecoration(
-                        hintText:
-                        "Chưa nhập vào",
+                      decoration: const InputDecoration(
+                        hintText: "Chưa nhập vào",
 
-                        hintStyle:
-                        TextStyle(
-                          color:
-                          Colors.black38,
-                        ),
+                        hintStyle: TextStyle(color: Colors.black38),
 
-                        border:
-                        InputBorder.none,
+                        border: InputBorder.none,
                       ),
                     ),
                   ),
 
-                  const Divider(
-                    color: Colors.black12,
-                  ),
+                  const Divider(color: Colors.black12),
 
                   rowItem(
-                    title: isIncome
-                        ? "Tiền thu"
-                        : "Tiền chi",
+                    title: isIncome ? "Tiền thu" : "Tiền chi",
 
                     child: TextField(
-                      controller:
-                      amountController,
+                      controller: amountController,
 
-                      keyboardType:
-                      TextInputType.number,
+                      keyboardType: TextInputType.number,
 
-                      style:
-                      const TextStyle(
-                        color:
-                        Colors.black87,
+                      style: const TextStyle(
+                        color: Colors.black87,
 
                         fontSize: 28,
 
-                        fontWeight:
-                        FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
 
-                      decoration:
-                      const InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: "0",
 
-                        hintStyle:
-                        TextStyle(
-                          color:
-                          Colors.black38,
-                        ),
+                        hintStyle: TextStyle(color: Colors.black38),
 
-                        border:
-                        InputBorder.none,
+                        border: InputBorder.none,
 
                         suffixText: "đ",
 
-                        suffixStyle:
-                        TextStyle(
-                          color:
-                          Colors.black87,
-                        ),
+                        suffixStyle: TextStyle(color: Colors.black87),
                       ),
                     ),
                   ),
@@ -352,20 +249,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   const SizedBox(height: 20),
 
                   const Align(
-                    alignment:
-                    Alignment.centerLeft,
+                    alignment: Alignment.centerLeft,
 
                     child: Text(
                       "Danh mục",
 
                       style: TextStyle(
-                        color:
-                        Colors.black87,
+                        color: Colors.black87,
 
                         fontSize: 22,
 
-                        fontWeight:
-                        FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
@@ -375,91 +269,67 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   GridView.builder(
                     shrinkWrap: true,
 
-                    physics:
-                    const NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
 
-                    itemCount:
-                    currentCategories.length,
+                    itemCount: currentCategories.length,
 
                     gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
 
-                      mainAxisSpacing: 12,
+                          mainAxisSpacing: 12,
 
-                      crossAxisSpacing: 12,
+                          crossAxisSpacing: 12,
 
-                      childAspectRatio: 1.25,
-                    ),
+                          childAspectRatio: 1.25,
+                        ),
 
-                    itemBuilder:
-                        (context, index) {
+                    itemBuilder: (context, index) {
+                      final category = currentCategories[index];
 
-                      final category =
-                      currentCategories[index];
-
-                      final isSelected =
-                          selectedCategory ==
-                              category["name"];
+                      final isSelected = selectedCategory == category["name"];
 
                       return InkWell(
                         onTap: () {
                           setState(() {
-                            selectedCategory =
-                            category["name"];
+                            selectedCategory = category["name"];
                           });
                         },
 
                         child: Container(
-                          decoration:
-                          BoxDecoration(
-                            color:
-                            Colors.white,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
 
-                            borderRadius:
-                            BorderRadius.circular(
-                                10),
+                            borderRadius: BorderRadius.circular(10),
 
                             border: Border.all(
-                              color: isSelected
-                                  ? Colors.green
-                                  : Colors.black12,
+                              color: isSelected ? primaryGreen : Colors.black12,
 
-                              width: isSelected
-                                  ? 2.5
-                                  : 1,
+                              width: isSelected ? 2.5 : 1,
                             ),
                           ),
 
                           child: Column(
-                            mainAxisAlignment:
-                            MainAxisAlignment
-                                .center,
+                            mainAxisAlignment: MainAxisAlignment.center,
 
                             children: [
-
                               Icon(
                                 category["icon"],
 
-                                color:
-                                category["color"],
+                                color: category["color"],
 
                                 size: 32,
                               ),
 
-                              const SizedBox(
-                                  height: 8),
+                              const SizedBox(height: 8),
 
                               Text(
                                 category["name"],
 
-                                textAlign:
-                                TextAlign.center,
+                                textAlign: TextAlign.center,
 
-                                style:
-                                const TextStyle(
-                                  color: Colors
-                                      .black87,
+                                style: const TextStyle(
+                                  color: Colors.black87,
 
                                   fontSize: 14,
                                 ),
@@ -477,35 +347,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 40),
 
             Padding(
-              padding:
-              const EdgeInsets.symmetric(
-                horizontal: 24,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
 
               child: SizedBox(
                 width: double.infinity,
                 height: 58,
 
                 child: ElevatedButton(
-                  style:
-                  ElevatedButton.styleFrom(
-                    backgroundColor:
-                    Colors.green,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryGreen,
 
-                    shape:
-                    RoundedRectangleBorder(
-                      borderRadius:
-                      BorderRadius.circular(
-                          30),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
                     ),
                   ),
 
                   onPressed: () {
                     if (amountController.text.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Vui lòng nhập số tiền"),
-                        ),
+                        const SnackBar(content: Text("Vui lòng nhập số tiền")),
                       );
                       return;
                     }
@@ -522,15 +382,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   },
 
                   child: Text(
-                    isIncome
-                        ? "Nhập khoản thu"
-                        : "Nhập khoản chi",
+                    isIncome ? "Nhập khoản thu" : "Nhập khoản chi",
 
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
-                      fontWeight:
-                      FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -544,29 +401,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget typeButton(
-      String type,
-      String title,
-      ) {
-    bool isSelected =
-        selectedType == type;
+  Widget typeButton(String type, String title) {
+    bool isSelected = selectedType == type;
 
     return GestureDetector(
       onTap: () => changeType(type),
 
       child: Container(
-        padding:
-        const EdgeInsets.symmetric(
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
 
         decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.green
-              : Colors.transparent,
+          color: isSelected ? primaryGreen : Colors.transparent,
 
-          borderRadius:
-          BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(10),
         ),
 
         child: Center(
@@ -574,14 +421,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             title,
 
             style: TextStyle(
-              color: isSelected
-                  ? Colors.white
-                  : Colors.green,
+              color: isSelected ? Colors.white : primaryGreen,
 
               fontSize: 18,
 
-              fontWeight:
-              FontWeight.bold,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
@@ -589,13 +433,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  Widget rowItem({
-    required String title,
-    required Widget child,
-  }) {
+  Widget rowItem({required String title, required Widget child}) {
     return Row(
       children: [
-
         SizedBox(
           width: 100,
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'calendar_screen.dart';
 import 'home_screen.dart';
+import 'report_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -17,7 +18,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> screens = const [
     HomeScreen(),
     CalendarScreen(),
-    ReportPage(),
+    ReportScreen(),
     AccountPage(),
   ];
 
@@ -69,25 +70,6 @@ class CalendarPage extends StatelessWidget {
       ),
       body: const Center(
         child: Text('Màn hình lịch', style: TextStyle(fontSize: 24)),
-      ),
-    );
-  }
-}
-
-class ReportPage extends StatelessWidget {
-  const ReportPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _MainNavigationState.softGreen,
-      appBar: AppBar(
-        title: const Text('Báo cáo'),
-        backgroundColor: _MainNavigationState.primaryGreen,
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Text('Màn hình báo cáo', style: TextStyle(fontSize: 24)),
       ),
     );
   }

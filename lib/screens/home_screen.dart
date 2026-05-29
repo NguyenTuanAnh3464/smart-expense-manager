@@ -16,7 +16,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-
   Widget summaryCard({
     required String title,
     required String amount,
@@ -31,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -40,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: color.withOpacity(0.12),
+              backgroundColor: color.withValues(alpha: 0.12),
               child: Icon(icon, color: color),
             ),
             const SizedBox(width: 12),
@@ -53,10 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     amount,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: color, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -99,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     loadTransactions();
   }
+
   Future<void> loadTransactions() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -112,11 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final data = snapshot.docs.map((doc) {
       final item = doc.data();
 
-      return {
-        ...item,
-        "id": doc.id,
-        "date": item["date"].toDate(),
-      };
+      return {...item, "id": doc.id, "date": item["date"].toDate()};
     }).toList();
 
     setState(() {
@@ -175,17 +168,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final id = oldTransaction["id"];
 
       if (id != null) {
-        await firestore
-            .collection("transactions")
-            .doc(id)
-            .update(result);
+        await firestore.collection("transactions").doc(id).update(result);
       }
 
       setState(() {
-        transactions[index] = {
-          ...result,
-          "id": id,
-        };
+        transactions[index] = {...result, "id": id};
       });
     }
   }
@@ -193,14 +180,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> openAddTransaction(String type) async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => AddTransactionScreen(type: type),
-      ),
+      MaterialPageRoute(builder: (context) => AddTransactionScreen(type: type)),
     );
 
     if (result != null) {
-
-
       await addTransactionToFirestore(result);
 
       setState(() {
@@ -216,8 +199,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> addTransactionToFirestore(
-      Map<String, dynamic> transaction,
-      ) async {
+    Map<String, dynamic> transaction,
+  ) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;
@@ -244,9 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
               );
             },
             icon: const Icon(Icons.logout),
@@ -267,15 +248,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF2EAD4B),
-                      Color(0xFF168A36),
-                    ],
+                    colors: [Color(0xFF2EAD4B), Color(0xFF168A36)],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.green.withOpacity(0.25),
+                      color: Colors.green.withValues(alpha: 0.25),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -284,12 +262,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 child: Row(
                   children: [
-
                     Container(
                       width: 46,
                       height: 46,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
+                        color: Colors.white.withValues(alpha: 0.18),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -306,7 +283,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-
                           const Text(
                             "Người dùng",
                             style: TextStyle(
@@ -337,13 +313,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-
                         const Text(
                           "Số dư hiện tại",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
                         ),
 
                         const SizedBox(height: 2),
@@ -361,9 +333,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-
-
-
 
               const SizedBox(height: 20),
 
@@ -391,7 +360,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
               Row(
                 children: [
-
                   actionButton(
                     title: "Thêm thu",
                     icon: Icons.add,
@@ -416,10 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const Text(
                 "Giao dịch gần đây",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 10),
@@ -427,98 +392,100 @@ class _HomeScreenState extends State<HomeScreen> {
               transactions.isEmpty
                   ? const Text("Chưa có giao dịch nào")
                   : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: transactions.length,
-                itemBuilder: (context, index) {
-                  final item = transactions[index];
-                  final isIncome = item["type"] == "income";
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: transactions.length,
+                      itemBuilder: (context, index) {
+                        final item = transactions[index];
+                        final isIncome = item["type"] == "income";
 
-                  return Slidable(
-                    key: ValueKey(index),
-                    endActionPane: ActionPane(
-                      motion: const StretchMotion(),
-                      children: [
-                        SlidableAction(
-                          onPressed: (context) async {
-                            final id = item["id"];
+                        return Slidable(
+                          key: ValueKey(index),
+                          endActionPane: ActionPane(
+                            motion: const StretchMotion(),
+                            children: [
+                              SlidableAction(
+                                onPressed: (context) async {
+                                  final id = item["id"];
 
-                            if (id != null) {
-                              await firestore
-                                  .collection("transactions")
-                                  .doc(id)
-                                  .delete();
-                            }
+                                  if (id != null) {
+                                    await firestore
+                                        .collection("transactions")
+                                        .doc(id)
+                                        .delete();
+                                  }
 
-                            setState(() {
-                              transactions.removeAt(index);
-                            });
-                          },
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          icon: Icons.delete,
-                          label: "Xóa",
-                        ),
-                      ],
-                    ),
-                    child: Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        onTap: () {
-                          editTransaction(index);
-                        },
-                        leading: Icon(
-                          isIncome
-                              ? Icons.account_balance_wallet
-                              : Icons.shopping_bag,
-                          color: isIncome ? Colors.green : Colors.red,
-                          size: 30,
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item["category"],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
+                                  setState(() {
+                                    transactions.removeAt(index);
+                                  });
+                                },
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                icon: Icons.delete,
+                                label: "Xóa",
+                              ),
+                            ],
+                          ),
+                          child: Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              onTap: () {
+                                editTransaction(index);
+                              },
+                              leading: Icon(
+                                isIncome
+                                    ? Icons.account_balance_wallet
+                                    : Icons.shopping_bag,
+                                color: isIncome ? Colors.green : Colors.red,
+                                size: 30,
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item["category"],
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    "${isIncome ? "+" : "-"}${formatMoney((item["amount"] as num).toDouble())}",
+                                    style: TextStyle(
+                                      color: isIncome
+                                          ? Colors.green
+                                          : Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.grey,
+                                  ),
+                                ],
+                              ),
+                              subtitle: Text(
+                                item["note"].toString().isEmpty
+                                    ? "Không có ghi chú"
+                                    : item["note"],
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            Text(
-                              "${isIncome ? "+" : "-"}${formatMoney((item["amount"] as num).toDouble())}",
-                              style: TextStyle(
-                                color: isIncome ? Colors.green : Colors.red,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
-                        subtitle: Text(
-                          item["note"].toString().isEmpty
-                              ? "Không có ghi chú"
-                              : item["note"],
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ],
           ),
         ),
