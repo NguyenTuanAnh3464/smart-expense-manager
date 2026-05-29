@@ -365,52 +365,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
 
-          const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-          Row(
-            children: [
-              summaryCard(
-                title: "Tổng thu",
-                amount: formatMoney(totalIncome),
-                icon: Icons.trending_up,
-                color: Colors.green,
+              Row(
+                children: [
+                  summaryCard(
+                    title: "Tổng thu",
+                    amount: formatMoney(totalIncome),
+                    icon: Icons.trending_up,
+                    color: Colors.green,
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  summaryCard(
+                    title: "Tổng chi",
+                    amount: formatMoney(totalExpense),
+                    icon: Icons.trending_down,
+                    color: Colors.red,
+                  ),
+                ],
               ),
 
-              const SizedBox(width: 12),
+              const SizedBox(height: 18),
 
-              summaryCard(
-                title: "Tổng chi",
-                amount: formatMoney(totalExpense),
-                icon: Icons.trending_down,
-                color: Colors.red,
+              Row(
+                children: [
+
+                  actionButton(
+                    title: "Thêm thu",
+                    icon: Icons.add,
+                    onPressed: () {
+                      openAddTransaction("income");
+                    },
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  actionButton(
+                    title: "Thêm chi",
+                    icon: Icons.remove,
+                    onPressed: () {
+                      openAddTransaction("expense");
+                    },
+                  ),
+                ],
               ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-
-          Row(
-            children: [
-
-              actionButton(
-                title: "Thêm thu",
-                icon: Icons.add,
-                onPressed: () {
-                  openAddTransaction("income");
-                },
-              ),
-
-              const SizedBox(width: 12),
-
-              actionButton(
-                title: "Thêm chi",
-                icon: Icons.remove,
-                onPressed: () {
-                  openAddTransaction("expense");
-                },
-              ),
-            ],
-          ),
 
               const SizedBox(height: 30),
 
