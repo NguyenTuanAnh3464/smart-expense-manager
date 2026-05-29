@@ -11,6 +11,8 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int currentIndex = 0;
+  static const Color primaryGreen = Color(0xFF168A36);
+  static const Color softGreen = Color(0xFFEAF7EE);
 
   final List<Widget> screens = const [
     HomeScreen(),
@@ -26,18 +28,18 @@ class _MainNavigationState extends State<MainNavigation> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.green,
+        backgroundColor: Colors.white,
+        selectedItemColor: primaryGreen,
         unselectedItemColor: Colors.grey,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        elevation: 10,
         onTap: (index) {
           setState(() {
             currentIndex = index;
           });
         },
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Trang chủ',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_month),
             label: 'Lịch',
@@ -46,10 +48,7 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.bar_chart),
             label: 'Báo cáo',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Tài khoản',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Tài khoản'),
         ],
       ),
     );
@@ -62,16 +61,14 @@ class CalendarPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: _MainNavigationState.softGreen,
       appBar: AppBar(
         title: const Text('Lịch'),
-        backgroundColor: Colors.green,
+        backgroundColor: _MainNavigationState.primaryGreen,
+        foregroundColor: Colors.white,
       ),
       body: const Center(
-        child: Text(
-          'Màn hình lịch',
-          style: TextStyle(fontSize: 24),
-        ),
+        child: Text('Màn hình lịch', style: TextStyle(fontSize: 24)),
       ),
     );
   }
@@ -83,16 +80,14 @@ class ReportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: _MainNavigationState.softGreen,
       appBar: AppBar(
         title: const Text('Báo cáo'),
-        backgroundColor: Colors.green,
+        backgroundColor: _MainNavigationState.primaryGreen,
+        foregroundColor: Colors.white,
       ),
       body: const Center(
-        child: Text(
-          'Màn hình báo cáo',
-          style: TextStyle(fontSize: 24),
-        ),
+        child: Text('Màn hình báo cáo', style: TextStyle(fontSize: 24)),
       ),
     );
   }
@@ -104,16 +99,14 @@ class AccountPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: _MainNavigationState.softGreen,
       appBar: AppBar(
         title: const Text('Tài khoản'),
-        backgroundColor: Colors.green,
+        backgroundColor: _MainNavigationState.primaryGreen,
+        foregroundColor: Colors.white,
       ),
       body: const Center(
-        child: Text(
-          'Màn hình tài khoản',
-          style: TextStyle(fontSize: 24),
-        ),
+        child: Text('Màn hình tài khoản', style: TextStyle(fontSize: 24)),
       ),
     );
   }

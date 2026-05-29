@@ -11,6 +11,10 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  static const Color primaryGreen = Color(0xFF168A36);
+  static const Color softGreen = Color(0xFFEAF7EE);
+  static const Color lineGreen = Color(0xFFCDE8D4);
+
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   String formatMoney(double value) {
@@ -43,15 +47,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text("Chưa đăng nhập")),
-      );
+      return const Scaffold(body: Center(child: Text("Chưa đăng nhập")));
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF151426),
+      backgroundColor: softGreen,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF151426),
+        backgroundColor: primaryGreen,
         elevation: 0,
         centerTitle: true,
         title: const Text(
@@ -102,7 +104,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           return Column(
             children: [
               Container(
-                color: const Color(0xFF17304A),
+                color: primaryGreen,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Row(
                   children: [
@@ -114,14 +116,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF151426),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           DateFormat("MM/yyyy").format(currentMonth),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: primaryGreen,
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
                           ),
@@ -130,7 +132,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),
                     IconButton(
                       onPressed: nextMonth,
-                      icon: const Icon(Icons.chevron_right, color: Colors.white),
+                      icon: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -138,15 +143,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
               _buildCalendar(monthTransactions),
 
-              _summaryRow(
-                income: income,
-                expense: expense,
-                total: total,
-              ),
+              _summaryRow(income: income, expense: expense, total: total),
 
-              Expanded(
-                child: _buildTransactionList(monthTransactions),
-              ),
+              Expanded(child: _buildTransactionList(monthTransactions)),
             ],
           );
         },
@@ -206,48 +205,66 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }
             }
 
-            return _dayCell(
-              "$day",
-              income: income,
-              expense: expense,
-            );
+            return _dayCell("$day", income: income, expense: expense);
           },
         ),
       ],
     );
   }
 
-  Widget _dayCell(
-      String day, {
-        double income = 0,
-        double expense = 0,
-      }) {
+  Widget _dayCell(String day, {double income = 0, double expense = 0}) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.blueGrey.shade700, width: 0.5),
-        color: const Color(0xFF151426),
+        border: Border.all(color: lineGreen, width: 0.7),
+        color: Colors.white,
       ),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             day,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
+            style: const TextStyle(
+              color: Color(0xFF1F2933),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const Spacer(),
-          if (income > 0)
-            Text(
-              formatMoney(income),
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 10),
+          Expanded(
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.bottomLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (income > 0)
+                      Text(
+                        formatMoney(income),
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: primaryGreen,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (expense > 0)
+                      Text(
+                        formatMoney(expense),
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          if (expense > 0)
-            Text(
-              formatMoney(expense),
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 10),
-            ),
+          ),
         ],
       ),
     );
@@ -261,16 +278,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: const BoxDecoration(
+        color: Colors.white,
         border: Border(
-          top: BorderSide(color: Colors.white12),
-          bottom: BorderSide(color: Colors.white12),
+          top: BorderSide(color: lineGreen),
+          bottom: BorderSide(color: lineGreen),
         ),
       ),
       child: Row(
         children: [
-          _summaryItem("Thu nhập", income, Colors.lightBlueAccent),
+          _summaryItem("Thu nhập", income, primaryGreen),
           _summaryItem("Chi tiêu", expense, Colors.redAccent),
-          _summaryItem("Tổng", total, total >= 0 ? Colors.lightBlueAccent : Colors.red),
+          _summaryItem("Tổng", total, total >= 0 ? primaryGreen : Colors.red),
         ],
       ),
     );
@@ -280,9 +298,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Expanded(
       child: Column(
         children: [
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.black87, fontSize: 14),
+          ),
           Text(
             formatMoney(amount),
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: color,
               fontSize: 18,
@@ -306,7 +328,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return const Center(
         child: Text(
           "Tháng này chưa có giao dịch",
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: Colors.black54),
         ),
       );
     }
@@ -322,20 +344,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return ListTile(
           leading: Icon(
             isIncome ? Icons.savings : Icons.shopping_bag,
-            color: isIncome ? Colors.lightBlueAccent : Colors.redAccent,
+            color: isIncome ? primaryGreen : Colors.redAccent,
           ),
           title: Text(
             item["category"],
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           subtitle: Text(
             "${DateFormat("dd/MM/yyyy").format(date)}  ${item["note"] ?? ""}",
-            style: const TextStyle(color: Colors.white70),
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.black54),
           ),
           trailing: Text(
             "${isIncome ? "+" : "-"}${formatMoney(amount)}",
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: isIncome ? Colors.lightBlueAccent : Colors.redAccent,
+              color: isIncome ? primaryGreen : Colors.redAccent,
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
@@ -355,7 +383,7 @@ class _WeekDay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        color: Colors.lightBlue,
+        color: _CalendarScreenState.primaryGreen,
         padding: const EdgeInsets.symmetric(vertical: 6),
         alignment: Alignment.center,
         child: Text(
