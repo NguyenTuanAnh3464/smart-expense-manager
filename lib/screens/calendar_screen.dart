@@ -177,135 +177,155 @@ class _CalendarScreenState extends State<CalendarScreen> {
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
-            .collection("transactions")
-            .where("userId", isEqualTo: user.uid)
+            .collection("user_settings")
+            .doc(user.uid)
             .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        builder: (context, settingSnapshot) {
+          final settings = settingSnapshot.data?.data() ?? const {};
 
-          final allTransactions = snapshot.data!.docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final rawDate = data["date"];
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection("transactions")
+                .where("userId", isEqualTo: user.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            return {
-              ...data,
-              "id": doc.id,
-              "date": rawDate is Timestamp ? rawDate.toDate() : rawDate,
-            };
-          }).toList();
+              final allTransactions = snapshot.data!.docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final rawDate = data["date"];
 
-          final monthTransactions = allTransactions.where((item) {
-            final date = item["date"] as DateTime;
-            return date.year == currentMonth.year &&
-                date.month == currentMonth.month;
-          }).toList();
+                return {
+                  ...data,
+                  "id": doc.id,
+                  "date": rawDate is Timestamp ? rawDate.toDate() : rawDate,
+                };
+              }).toList();
 
-          final selectedTransactions = allTransactions.where((item) {
-            final date = item["date"] as DateTime;
-            return DateUtils.isSameDay(date, selectedDate);
-          }).toList();
+              final monthTransactions = allTransactions.where((item) {
+                final date = item["date"] as DateTime;
+                return date.year == currentMonth.year &&
+                    date.month == currentMonth.month;
+              }).toList();
 
-          double selectedIncome = 0;
-          double selectedExpense = 0;
+              final selectedTransactions = allTransactions.where((item) {
+                final date = item["date"] as DateTime;
+                return DateUtils.isSameDay(date, selectedDate);
+              }).toList();
 
-          for (var item in selectedTransactions) {
-            final amount = (item["amount"] as num).toDouble();
+              double selectedIncome = 0;
+              double selectedExpense = 0;
 
-            if (item["type"] == "income") {
-              selectedIncome += amount;
-            } else {
-              selectedExpense += amount;
-            }
-          }
+              for (var item in selectedTransactions) {
+                final amount = (item["amount"] as num).toDouble();
 
-          final selectedTotal = selectedIncome - selectedExpense;
+                if (item["type"] == "income") {
+                  selectedIncome += amount;
+                } else {
+                  selectedExpense += amount;
+                }
+              }
 
-          return Column(
-            children: [
-              Container(
-                color: primaryGreen,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: previousMonth,
-                      icon: const Icon(Icons.chevron_left, color: Colors.white),
-                    ),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          DateFormat("MM/yyyy").format(currentMonth),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: primaryGreen,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
+              final selectedTotal = selectedIncome - selectedExpense;
+
+              return Column(
+                children: [
+                  Container(
+                    color: primaryGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: previousMonth,
+                          icon: const Icon(
+                            Icons.chevron_left,
+                            color: Colors.white,
                           ),
                         ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: nextMonth,
-                      icon: const Icon(
-                        Icons.chevron_right,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                child: _buildCalendar(monthTransactions),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: _summaryRow(
-                  income: selectedIncome,
-                  expense: selectedExpense,
-                  total: selectedTotal,
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Giao dịch ngày ${DateFormat("dd/MM/yyyy").format(selectedDate)}",
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              DateFormat("MM/yyyy").format(currentMonth),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: primaryGreen,
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: nextMonth,
+                          icon: const Icon(
+                            Icons.chevron_right,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ),
 
-              Expanded(child: _buildTransactionList(selectedTransactions)),
-            ],
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                    child: _buildCalendar(monthTransactions, settings),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: _summaryRow(
+                      income: selectedIncome,
+                      expense: selectedExpense,
+                      total: selectedTotal,
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Giao dịch ngày ${DateFormat("dd/MM/yyyy").format(selectedDate)}",
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  Expanded(child: _buildTransactionList(selectedTransactions)),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _buildCalendar(List<Map<String, dynamic>> transactions) {
-    final firstWeekday = firstDayOfMonth.weekday;
+  Widget _buildCalendar(
+    List<Map<String, dynamic>> transactions,
+    Map<String, dynamic> settings,
+  ) {
+    final weekStartsSunday = settings["calendarWeekStart"] == "sunday";
+    final amountDisplay = settings["calendarAmountDisplay"] ?? "income_expense";
+    final firstWeekday = weekStartsSunday
+        ? firstDayOfMonth.weekday % 7
+        : firstDayOfMonth.weekday - 1;
     final daysInMonth = lastDayOfMonth.day;
 
-    final totalCells = firstWeekday - 1 + daysInMonth;
+    final totalCells = firstWeekday + daysInMonth;
 
     return Container(
       decoration: BoxDecoration(
@@ -325,15 +345,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: Column(
           children: [
             Row(
-              children: const [
-                _WeekDay("T2"),
-                _WeekDay("T3"),
-                _WeekDay("T4"),
-                _WeekDay("T5"),
-                _WeekDay("T6"),
-                _WeekDay("T7"),
-                _WeekDay("CN"),
-              ],
+              children: weekStartsSunday
+                  ? const [
+                      _WeekDay("CN"),
+                      _WeekDay("T2"),
+                      _WeekDay("T3"),
+                      _WeekDay("T4"),
+                      _WeekDay("T5"),
+                      _WeekDay("T6"),
+                      _WeekDay("T7"),
+                    ]
+                  : const [
+                      _WeekDay("T2"),
+                      _WeekDay("T3"),
+                      _WeekDay("T4"),
+                      _WeekDay("T5"),
+                      _WeekDay("T6"),
+                      _WeekDay("T7"),
+                      _WeekDay("CN"),
+                    ],
             ),
             GridView.builder(
               shrinkWrap: true,
@@ -344,11 +374,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 childAspectRatio: 1.05,
               ),
               itemBuilder: (context, index) {
-                if (index < firstWeekday - 1) {
+                if (index < firstWeekday) {
                   return const SizedBox.shrink();
                 }
 
-                final day = index - firstWeekday + 2;
+                final day = index - firstWeekday + 1;
                 final cellDate = DateTime(
                   currentMonth.year,
                   currentMonth.month,
@@ -373,7 +403,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   }
                 }
 
-                return _dayCell(cellDate, income: income, expense: expense);
+                return _dayCell(
+                  cellDate,
+                  income:
+                      amountDisplay == "expense_only" ||
+                          amountDisplay == "hidden"
+                      ? 0
+                      : income,
+                  expense:
+                      amountDisplay == "income_only" ||
+                          amountDisplay == "hidden"
+                      ? 0
+                      : expense,
+                );
               },
             ),
           ],

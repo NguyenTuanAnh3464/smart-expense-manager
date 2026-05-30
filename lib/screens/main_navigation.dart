@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'basic_setting_screen.dart';
 import 'budget_screen.dart';
 import 'calendar_screen.dart';
 import 'home_screen.dart';
@@ -23,6 +26,37 @@ class _MainNavigationState extends State<MainNavigation> {
     BudgetScreen(),
     AccountPage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    loadStartupTab();
+  }
+
+  Future<void> loadStartupTab() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection("user_settings")
+        .doc(user.uid)
+        .get();
+    if (!context.mounted) return;
+    if (!snapshot.exists) return;
+
+    final tab = snapshot.data()?["startupTab"]?.toString();
+    final nextIndex = switch (tab) {
+      "calendar" => 1,
+      "report" => 2,
+      "budget" => 3,
+      "more" => 4,
+      _ => 0,
+    };
+
+    setState(() {
+      currentIndex = nextIndex;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +89,7 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.account_balance_wallet),
             label: 'Ngân sách',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Tài khoản'),
+          BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'Khác'),
         ],
       ),
     );
@@ -89,12 +123,42 @@ class AccountPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: _MainNavigationState.softGreen,
       appBar: AppBar(
-        title: const Text('Tài khoản'),
+        title: const Text('Khác'),
         backgroundColor: _MainNavigationState.primaryGreen,
         foregroundColor: Colors.white,
       ),
-      body: const Center(
-        child: Text('Màn hình tài khoản', style: TextStyle(fontSize: 24)),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: ListTile(
+              leading: const Icon(
+                Icons.settings,
+                color: _MainNavigationState.primaryGreen,
+              ),
+              title: const Text(
+                'Cài đặt cơ bản',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BasicSettingScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
