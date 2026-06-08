@@ -3,10 +3,12 @@ import 'add_transaction_screen.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'login_screen.dart';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:intl/intl.dart';
+
+import '../models/transaction_model.dart';
+import '../services/transaction_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,15 +24,20 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required Color color,
   }) {
+    final theme = Theme.of(context);
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: theme.dividerColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
+              color: Colors.black.withValues(
+                alpha: theme.brightness == Brightness.dark ? 0.18 : 0.06,
+              ),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -47,7 +54,14 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.68,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     amount,
@@ -68,14 +82,16 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required VoidCallback onPressed,
   }) {
+    final theme = Theme.of(context);
+
     return Expanded(
       child: ElevatedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon),
         label: Text(title),
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.green,
+          backgroundColor: theme.cardColor,
+          foregroundColor: theme.colorScheme.primary,
           elevation: 1,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
@@ -86,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final TransactionService transactionService = TransactionService();
 
   List<Map<String, dynamic>> transactions = [];
 
@@ -101,20 +117,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (user == null) return;
 
-    final snapshot = await firestore
-        .collection("transactions")
-        .where("userId", isEqualTo: user.uid)
-        .get();
-
-    final data = snapshot.docs.map((doc) {
-      final item = doc.data();
-
-      return {...item, "id": doc.id, "date": item["date"].toDate()};
-    }).toList();
+    final data = await transactionService.getTransactionsOnce();
 
     setState(() {
-      transactions = List<Map<String, dynamic>>.from(data);
+      transactions = data.map(transactionToMap).toList();
     });
+  }
+
+  Map<String, dynamic> transactionToMap(TransactionModel transaction) {
+    return {
+      "id": transaction.id,
+      "userId": transaction.userId,
+      "category": transaction.category,
+      "amount": transaction.amount,
+      "note": transaction.note,
+      "type": transaction.type,
+      "date": transaction.date,
+      if (transaction.accountId != null) "accountId": transaction.accountId,
+    };
   }
 
   double get balance {
@@ -167,13 +187,20 @@ class _HomeScreenState extends State<HomeScreen> {
     if (result != null) {
       final id = oldTransaction["id"];
 
-      if (id != null) {
-        await firestore.collection("transactions").doc(id).update(result);
-      }
+      try {
+        if (id != null) {
+          await transactionService.updateTransaction(id, result);
+        }
 
-      setState(() {
-        transactions[index] = {...result, "id": id};
-      });
+        setState(() {
+          transactions[index] = {...result, "id": id};
+        });
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Không thể sửa giao dịch: $error")),
+        );
+      }
     }
   }
 
@@ -184,11 +211,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (result != null) {
-      await addTransactionToFirestore(result);
+      try {
+        final docId = await addTransactionToFirestore(result);
 
-      setState(() {
-        transactions.add(result);
-      });
+        setState(() {
+          transactions.add({...result, "id": docId});
+        });
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Không thể thêm giao dịch: $error")),
+        );
+      }
     }
   }
 
@@ -198,26 +232,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return "${formatter.format(amount)} VNĐ";
   }
 
-  Future<void> addTransactionToFirestore(
+  Future<String?> addTransactionToFirestore(
     Map<String, dynamic> transaction,
   ) async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    if (user == null) return null;
 
-    await firestore.collection("transactions").add({
-      ...transaction,
-      "userId": user.uid,
-    });
+    final docRef = await transactionService.addTransaction(transaction);
+    return docRef.id;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("Smart Expense Manager"),
-        backgroundColor: Colors.green,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         actions: [
           IconButton(
             onPressed: () async {
@@ -405,19 +437,30 @@ class _HomeScreenState extends State<HomeScreen> {
                             motion: const StretchMotion(),
                             children: [
                               SlidableAction(
-                                onPressed: (context) async {
+                                onPressed: (_) async {
                                   final id = item["id"];
 
-                                  if (id != null) {
-                                    await firestore
-                                        .collection("transactions")
-                                        .doc(id)
-                                        .delete();
-                                  }
+                                  try {
+                                    if (id != null) {
+                                      await transactionService
+                                          .deleteTransaction(id);
+                                    }
 
-                                  setState(() {
-                                    transactions.removeAt(index);
-                                  });
+                                    setState(() {
+                                      transactions.removeAt(index);
+                                    });
+                                  } catch (error) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(
+                                      this.context,
+                                    ).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          "Không thể xóa giao dịch: $error",
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
@@ -451,7 +494,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Expanded(
                                     child: Text(
                                       item["category"],
-                                      style: const TextStyle(
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
@@ -469,9 +515,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 4),
-                                  const Icon(
+                                  Icon(
                                     Icons.chevron_right,
-                                    color: Colors.grey,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.45),
                                   ),
                                 ],
                               ),
@@ -480,6 +529,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ? "Không có ghi chú"
                                     : item["note"],
                                 overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.68),
+                                ),
                               ),
                             ),
                           ),

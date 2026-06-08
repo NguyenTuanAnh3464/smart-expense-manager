@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../models/account_model.dart';
+import '../services/ai_service.dart';
+import '../services/account_service.dart';
+
 class AddTransactionScreen extends StatefulWidget {
   final String type;
   final Map<String, dynamic>? transaction;
@@ -18,11 +22,18 @@ class AddTransactionScreen extends StatefulWidget {
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
   static const Color primaryGreen = Color(0xFF168A36);
-  static const Color softGreen = Color(0xFFEAF7EE);
+  final AccountService accountService = AccountService();
+  final AIService aiService = AIService();
 
   late String selectedType;
 
   String selectedCategory = "Ăn uống";
+  String? selectedAccountId;
+  bool isLoadingAccounts = true;
+  bool isSuggestingCategory = false;
+  List<AccountModel> accounts = [];
+  String? suggestedCategory;
+  String? suggestionMessage;
 
   DateTime selectedDate = DateTime.now();
 
@@ -86,6 +97,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       amountController.text = widget.transaction!["amount"].toStringAsFixed(0);
       noteController.text = widget.transaction!["note"];
       selectedDate = widget.transaction!["date"];
+      selectedAccountId = widget.transaction!["accountId"]?.toString();
     } else {
       selectedType = widget.type;
       selectedCategory = selectedType == "income" ? "Tiền lương" : "Ăn uống";
@@ -93,10 +105,45 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         selectedDate = widget.initialDate!;
       }
     }
+    loadAccounts();
   }
 
   List<Map<String, dynamic>> get currentCategories {
     return selectedType == "income" ? incomeCategories : expenseCategories;
+  }
+
+  Future<void> loadAccounts() async {
+    try {
+      await accountService.ensureDefaultAccount();
+      final loadedAccounts = await accountService.getAccountsOnce();
+      if (!mounted) return;
+
+      final selectedExists =
+          selectedAccountId != null &&
+          loadedAccounts.any((account) => account.id == selectedAccountId);
+      final defaultAccount = loadedAccounts.isEmpty
+          ? null
+          : loadedAccounts.firstWhere(
+              (account) => account.isDefault,
+              orElse: () => loadedAccounts.first,
+            );
+
+      setState(() {
+        accounts = loadedAccounts;
+        selectedAccountId = selectedExists
+            ? selectedAccountId
+            : defaultAccount?.id;
+        isLoadingAccounts = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        isLoadingAccounts = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Không thể tải tài khoản: $error")),
+      );
+    }
   }
 
   Future<void> pickDate() async {
@@ -119,18 +166,87 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       selectedType = type;
 
       selectedCategory = type == "income" ? "Tiền lương" : "Ăn uống";
+      suggestedCategory = null;
+      suggestionMessage = null;
+    });
+  }
+
+  Future<void> suggestCategoryWithAI() async {
+    final note = noteController.text.trim();
+    final amount =
+        double.tryParse(amountController.text.replaceAll(",", "").trim()) ?? 0;
+
+    if (note.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Nhập ghi chú trước khi gợi ý category")),
+      );
+      return;
+    }
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Nhập số tiền trước khi gợi ý category")),
+      );
+      return;
+    }
+
+    setState(() {
+      isSuggestingCategory = true;
+      suggestionMessage = null;
+    });
+
+    try {
+      final suggestion = await aiService.suggestCategory(
+        note: note,
+        amount: amount,
+        type: selectedType,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        suggestedCategory = suggestion;
+        suggestionMessage = suggestion == null
+            ? "AI chưa có gợi ý phù hợp."
+            : "Gợi ý category: $suggestion";
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        suggestedCategory = null;
+        suggestionMessage = "Không thể gợi ý category lúc này.";
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSuggestingCategory = false;
+        });
+      }
+    }
+  }
+
+  void applySuggestedCategory() {
+    final suggestion = suggestedCategory;
+    if (suggestion == null) return;
+    final hasSuggestion = currentCategories.any(
+      (category) => category["name"] == suggestion,
+    );
+
+    setState(() {
+      selectedCategory = hasSuggestion ? suggestion : "Khác";
+      suggestedCategory = null;
+      suggestionMessage = null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     bool isIncome = selectedType == "income";
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: softGreen,
+      backgroundColor: theme.scaffoldBackgroundColor,
 
       appBar: AppBar(
-        backgroundColor: primaryGreen,
+        backgroundColor: theme.appBarTheme.backgroundColor,
         elevation: 0,
 
         iconTheme: const IconThemeData(color: Colors.white),
@@ -153,7 +269,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               padding: const EdgeInsets.all(4),
 
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.cardColor,
 
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -170,7 +286,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             const SizedBox(height: 20),
 
             Container(
-              color: Colors.white,
+              color: theme.cardColor,
 
               padding: const EdgeInsets.all(16),
 
@@ -185,8 +301,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       child: Text(
                         "${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
 
-                        style: const TextStyle(
-                          color: Colors.black87,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
@@ -194,27 +310,45 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     ),
                   ),
 
-                  const Divider(color: Colors.black12),
+                  Divider(color: theme.dividerColor),
+
+                  rowItem(title: "Tài khoản", child: accountSelector()),
+
+                  Divider(color: theme.dividerColor),
 
                   rowItem(
                     title: "Ghi chú",
 
                     child: TextField(
                       controller: noteController,
+                      onChanged: (_) {
+                        if (suggestedCategory == null &&
+                            suggestionMessage == null) {
+                          return;
+                        }
+                        setState(() {
+                          suggestedCategory = null;
+                          suggestionMessage = null;
+                        });
+                      },
 
-                      style: const TextStyle(color: Colors.black87),
+                      style: TextStyle(color: theme.colorScheme.onSurface),
 
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: "Chưa nhập vào",
 
-                        hintStyle: TextStyle(color: Colors.black38),
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.45,
+                          ),
+                        ),
 
                         border: InputBorder.none,
                       ),
                     ),
                   ),
 
-                  const Divider(color: Colors.black12),
+                  Divider(color: theme.dividerColor),
 
                   rowItem(
                     title: isIncome ? "Tiền thu" : "Tiền chi",
@@ -224,38 +358,63 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
                       keyboardType: TextInputType.number,
 
-                      style: const TextStyle(
-                        color: Colors.black87,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
 
                         fontSize: 28,
 
                         fontWeight: FontWeight.bold,
                       ),
 
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: "0",
 
-                        hintStyle: TextStyle(color: Colors.black38),
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.45,
+                          ),
+                        ),
 
                         border: InputBorder.none,
 
                         suffixText: "đ",
 
-                        suffixStyle: TextStyle(color: Colors.black87),
+                        suffixStyle: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
 
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: isSuggestingCategory
+                          ? null
+                          : suggestCategoryWithAI,
+                      icon: isSuggestingCategory
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: const Text("Gợi ý bằng AI"),
+                    ),
+                  ),
+
+                  categorySuggestionPanel(theme),
+
                   const SizedBox(height: 20),
 
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
 
                     child: Text(
                       "Danh mục",
 
                       style: TextStyle(
-                        color: Colors.black87,
+                        color: theme.colorScheme.onSurface,
 
                         fontSize: 22,
 
@@ -298,12 +457,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: theme.cardColor,
 
                             borderRadius: BorderRadius.circular(10),
 
                             border: Border.all(
-                              color: isSelected ? primaryGreen : Colors.black12,
+                              color: isSelected
+                                  ? primaryGreen
+                                  : theme.dividerColor,
 
                               width: isSelected ? 2.5 : 1,
                             ),
@@ -328,8 +489,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
                                 textAlign: TextAlign.center,
 
-                                style: const TextStyle(
-                                  color: Colors.black87,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
 
                                   fontSize: 14,
                                 ),
@@ -363,19 +524,40 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
 
                   onPressed: () {
-                    if (amountController.text.isEmpty) {
+                    final amount = double.tryParse(
+                      amountController.text.replaceAll(",", "").trim(),
+                    );
+
+                    if (amount == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Vui lòng nhập số tiền")),
+                        const SnackBar(
+                          content: Text("Vui lòng nhập số tiền hợp lệ"),
+                        ),
+                      );
+                      return;
+                    }
+                    if (amount < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Số dư không được âm")),
+                      );
+                      return;
+                    }
+                    if (selectedAccountId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Vui lòng chọn tài khoản tiền"),
+                        ),
                       );
                       return;
                     }
 
                     final transaction = {
                       "category": selectedCategory,
-                      "amount": double.parse(amountController.text),
+                      "amount": amount,
                       "note": noteController.text,
                       "type": selectedType,
                       "date": selectedDate,
+                      "accountId": selectedAccountId,
                     };
 
                     Navigator.pop(context, transaction);
@@ -433,6 +615,54 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  Widget categorySuggestionPanel(ThemeData theme) {
+    if (suggestionMessage == null) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: primaryGreen.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: primaryGreen.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            suggestionMessage!,
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (suggestedCategory != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: applySuggestedCategory,
+                  child: const Text("Chọn"),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      suggestedCategory = null;
+                      suggestionMessage = null;
+                    });
+                  },
+                  child: const Text("Bỏ qua"),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget rowItem({required String title, required Widget child}) {
     return Row(
       children: [
@@ -442,8 +672,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           child: Text(
             title,
 
-            style: const TextStyle(
-              color: Colors.black87,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
@@ -452,6 +682,53 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
         Expanded(child: child),
       ],
+    );
+  }
+
+  Widget accountSelector() {
+    if (isLoadingAccounts) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: LinearProgressIndicator(minHeight: 3),
+      );
+    }
+
+    if (accounts.isEmpty) {
+      return Text(
+        "Chưa có tài khoản",
+        style: TextStyle(
+          color: Theme.of(
+            context,
+          ).colorScheme.onSurface.withValues(alpha: 0.68),
+          fontSize: 16,
+        ),
+      );
+    }
+
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: selectedAccountId,
+        isExpanded: true,
+        items: accounts.map((account) {
+          return DropdownMenuItem<String>(
+            value: account.id,
+            child: Text(
+              account.name,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() {
+            selectedAccountId = value;
+          });
+        },
+      ),
     );
   }
 }

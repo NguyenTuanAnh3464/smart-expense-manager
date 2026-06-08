@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../services/transaction_service.dart';
 import 'add_transaction_screen.dart';
 
 enum ReportPeriod { month, year }
@@ -19,8 +20,7 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   static const Color primaryGreen = Color(0xFF168A36);
-  static const Color softGreen = Color(0xFFEAF7EE);
-  static const Color lineGreen = Color(0xFFCDE8D4);
+  final TransactionService transactionService = TransactionService();
 
   ReportPeriod selectedPeriod = ReportPeriod.month;
   ReportType selectedType = ReportType.expense;
@@ -147,15 +147,19 @@ class _ReportScreenState extends State<ReportScreen> {
         ),
       ),
     );
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (result == null) return;
 
-    await FirebaseFirestore.instance
-        .collection("transactions")
-        .doc(transaction["id"])
-        .update({...result, "userId": user.uid});
-    if (!context.mounted) return;
+    try {
+      await transactionService.updateTransaction(transaction["id"], result);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Không thể sửa giao dịch: $error")),
+      );
+    }
+    if (!mounted) return;
   }
 
   void showCategoryDetails(_CategoryReport report) {
@@ -176,10 +180,13 @@ class _ReportScreenState extends State<ReportScreen> {
           minChildSize: 0.45,
           maxChildSize: 0.92,
           builder: (context, scrollController) {
+            final theme = Theme.of(context);
             return Container(
-              decoration: const BoxDecoration(
-                color: softGreen,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+              decoration: BoxDecoration(
+                color: theme.scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(22),
+                ),
               ),
               child: Column(
                 children: [
@@ -188,7 +195,9 @@ class _ReportScreenState extends State<ReportScreen> {
                     width: 42,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.black26,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.18,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -207,8 +216,8 @@ class _ReportScreenState extends State<ReportScreen> {
                           child: Text(
                             report.name,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.black87,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                             ),
@@ -233,7 +242,7 @@ class _ReportScreenState extends State<ReportScreen> {
                         final date = item["date"] as DateTime;
 
                         return Card(
-                          color: Colors.white,
+                          color: theme.cardColor,
                           elevation: 1,
                           margin: const EdgeInsets.only(bottom: 10),
                           shape: RoundedRectangleBorder(
@@ -243,7 +252,6 @@ class _ReportScreenState extends State<ReportScreen> {
                             onTap: () async {
                               Navigator.pop(context);
                               await editTransaction(item);
-                              if (!this.context.mounted) return;
                             },
                             leading: Icon(
                               categoryIcon(item["category"].toString()),
@@ -252,15 +260,19 @@ class _ReportScreenState extends State<ReportScreen> {
                             title: Text(
                               item["category"].toString(),
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.black87,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             subtitle: Text(
                               "${DateFormat("dd/MM/yyyy").format(date)}  ${item["note"] ?? ""}",
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.black54),
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.68,
+                                ),
+                              ),
                             ),
                             trailing: Text(
                               "${isIncome ? "+" : "-"}${formatMoney(amount)}",
@@ -348,14 +360,14 @@ class _ReportScreenState extends State<ReportScreen> {
     }
 
     return Scaffold(
-      backgroundColor: softGreen,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           "Báo cáo",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        backgroundColor: primaryGreen,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -441,12 +453,17 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 const SizedBox(height: 14),
                 if (categoryReports.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 28),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
                     child: Center(
                       child: Text(
                         "Chưa có dữ liệu báo cáo",
-                        style: TextStyle(color: Colors.black54, fontSize: 16),
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.68),
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   )
@@ -487,23 +504,24 @@ class _PeriodSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ReportScreenState.lineGreen),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Row(
         children: [
-          _periodButton("Hàng Tháng", ReportPeriod.month),
-          _periodButton("Hàng Năm", ReportPeriod.year),
+          _periodButton("Hàng Tháng", ReportPeriod.month, theme),
+          _periodButton("Hàng Năm", ReportPeriod.year, theme),
         ],
       ),
     );
   }
 
-  Widget _periodButton(String label, ReportPeriod period) {
+  Widget _periodButton(String label, ReportPeriod period, ThemeData theme) {
     final isSelected = selectedPeriod == period;
 
     return Expanded(
@@ -513,16 +531,16 @@ class _PeriodSelector extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            color: isSelected ? _ReportScreenState.primaryGreen : Colors.white,
+            color: isSelected
+                ? _ReportScreenState.primaryGreen
+                : theme.cardColor,
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected
-                  ? Colors.white
-                  : _ReportScreenState.primaryGreen,
+              color: isSelected ? Colors.white : theme.colorScheme.primary,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -547,6 +565,7 @@ class _PeriodNavigator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = Theme.of(context).colorScheme.onSurface;
     return Row(
       children: [
         IconButton(
@@ -562,8 +581,8 @@ class _PeriodNavigator extends StatelessWidget {
                 child: Text(
                   title,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.black87,
+                  style: TextStyle(
+                    color: textColor,
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
                   ),
@@ -572,7 +591,10 @@ class _PeriodNavigator extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 range,
-                style: const TextStyle(color: Colors.black54, fontSize: 14),
+                style: TextStyle(
+                  color: textColor.withValues(alpha: 0.68),
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
@@ -650,18 +672,22 @@ class _OverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ReportScreenState.lineGreen),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(color: Colors.black54, fontSize: 14),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+              fontSize: 14,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -702,32 +728,37 @@ class _ReportTabs extends StatelessWidget {
     final isSelected = selectedType == type;
 
     return Expanded(
-      child: InkWell(
-        onTap: () => onChanged(type),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isSelected
-                    ? _ReportScreenState.primaryGreen
-                    : Colors.black12,
-                width: isSelected ? 3 : 1,
+      child: Builder(
+        builder: (context) {
+          final textColor = Theme.of(context).colorScheme.onSurface;
+          return InkWell(
+            onTap: () => onChanged(type),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isSelected
+                        ? _ReportScreenState.primaryGreen
+                        : Theme.of(context).dividerColor,
+                    width: isSelected ? 3 : 1,
+                  ),
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected
+                      ? _ReportScreenState.primaryGreen
+                      : textColor.withValues(alpha: 0.68),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected
-                  ? _ReportScreenState.primaryGreen
-                  : Colors.black54,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -750,26 +781,31 @@ class _ChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       height: 280,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ReportScreenState.lineGreen),
+        border: Border.all(color: theme.dividerColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.18 : 0.04,
+            ),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: reports.isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
                 "Chưa có dữ liệu báo cáo",
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                ),
               ),
             )
           : Stack(
@@ -795,9 +831,14 @@ class _ChartCard extends StatelessWidget {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       "Tổng",
-                      style: TextStyle(color: Colors.black54, fontSize: 13),
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.68,
+                        ),
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     SizedBox(
@@ -842,8 +883,9 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Card(
-      color: Colors.white,
+      color: theme.cardColor,
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -854,8 +896,8 @@ class _CategoryTile extends StatelessWidget {
         title: Text(
           report.name,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.black87,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
@@ -869,8 +911,8 @@ class _CategoryTile extends StatelessWidget {
                 child: Text(
                   formatMoney(report.amount),
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.black87,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
                   ),
@@ -879,10 +921,16 @@ class _CategoryTile extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 "${percent.toStringAsFixed(1)}%",
-                style: const TextStyle(color: Colors.black54, fontSize: 13),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, color: Colors.black38),
+              Icon(
+                Icons.chevron_right,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
             ],
           ),
         ),

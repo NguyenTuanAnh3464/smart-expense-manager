@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 
+import '../services/transaction_service.dart';
 import 'add_transaction_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -15,8 +16,7 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   static const Color primaryGreen = Color(0xFF168A36);
-  static const Color softGreen = Color(0xFFEAF7EE);
-  static const Color lineGreen = Color(0xFFCDE8D4);
+  final TransactionService transactionService = TransactionService();
 
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime selectedDate = DateTime.now();
@@ -67,7 +67,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             AddTransactionScreen(type: "expense", initialDate: selectedDate),
       ),
     );
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (result == null) return;
 
@@ -79,11 +79,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
     }
 
-    await FirebaseFirestore.instance.collection("transactions").add({
-      ...result,
-      "userId": user.uid,
-    });
-    if (!context.mounted) return;
+    try {
+      await transactionService.addTransaction(result);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Không thể thêm giao dịch: $error")),
+      );
+    }
+    if (!mounted) return;
   }
 
   Future<void> editTransaction(Map<String, dynamic> transaction) async {
@@ -99,7 +103,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
     );
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (result == null) return;
 
@@ -111,11 +115,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
     }
 
-    await FirebaseFirestore.instance
-        .collection("transactions")
-        .doc(transaction["id"])
-        .update({...result, "userId": user.uid});
-    if (!context.mounted) return;
+    try {
+      await transactionService.updateTransaction(transaction["id"], result);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Không thể sửa giao dịch: $error")),
+      );
+    }
+    if (!mounted) return;
   }
 
   Future<void> confirmDeleteTransaction(
@@ -140,15 +148,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
         );
       },
     );
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (shouldDelete != true) return;
 
-    await FirebaseFirestore.instance
-        .collection("transactions")
-        .doc(transaction["id"])
-        .delete();
-    if (!context.mounted) return;
+    try {
+      await transactionService.deleteTransaction(transaction["id"]);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Không thể xóa giao dịch: $error")),
+      );
+    }
+    if (!mounted) return;
   }
 
   @override
@@ -160,9 +172,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     return Scaffold(
-      backgroundColor: softGreen,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: primaryGreen,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         foregroundColor: Colors.white,
         centerTitle: true,
@@ -173,7 +185,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: openAddTransaction,
-        backgroundColor: primaryGreen,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),
       ),
@@ -250,14 +262,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: Theme.of(context).cardColor,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               DateFormat("MM/yyyy").format(currentMonth),
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: primaryGreen,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
                                 fontSize: 26,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -295,8 +307,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         "Giao dịch ngày ${DateFormat("dd/MM/yyyy").format(selectedDate)}",
-                        style: const TextStyle(
-                          color: Colors.black87,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -318,6 +330,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     List<Map<String, dynamic>> transactions,
     Map<String, dynamic> settings,
   ) {
+    final theme = Theme.of(context);
     final weekStartsSunday = settings["calendarWeekStart"] == "sunday";
     final amountDisplay = settings["calendarAmountDisplay"] ?? "income_expense";
     final firstWeekday = weekStartsSunday
@@ -329,12 +342,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: lineGreen),
+        border: Border.all(color: theme.dividerColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.18 : 0.05,
+            ),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -427,7 +442,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _dayCell(DateTime date, {double income = 0, double expense = 0}) {
     final isSelected = DateUtils.isSameDay(date, selectedDate);
     final isToday = DateUtils.isSameDay(date, DateTime.now());
-    final textColor = isSelected ? Colors.white : Colors.black87;
+    final theme = Theme.of(context);
+    final textColor = isSelected ? Colors.white : theme.colorScheme.onSurface;
 
     return InkWell(
       onTap: () {
@@ -444,10 +460,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ? primaryGreen
                 : isToday
                 ? primaryGreen
-                : lineGreen,
+                : theme.dividerColor,
             width: isToday && !isSelected ? 1.2 : 0.7,
           ),
-          color: isSelected ? primaryGreen : Colors.white,
+          color: isSelected ? primaryGreen : theme.cardColor,
         ),
         padding: const EdgeInsets.all(4),
         child: Column(
@@ -507,12 +523,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     required double expense,
     required double total,
   }) {
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: lineGreen),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Row(
         children: [
@@ -530,7 +548,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 14,
+            ),
           ),
           Text(
             formatMoney(amount),
@@ -555,10 +576,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
 
     if (sorted.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           "Ngày này chưa có giao dịch",
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.68),
+          ),
         ),
       );
     }
@@ -586,7 +611,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ],
           ),
           child: Card(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             elevation: 1,
             shape: RoundedRectangleBorder(
@@ -606,8 +631,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               title: Text(
                 item["category"],
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.black87,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -617,7 +642,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ? DateFormat("dd/MM/yyyy").format(date)
                     : item["note"],
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.68),
+                ),
               ),
               trailing: Text(
                 "${isIncome ? "+" : "-"}${formatMoney(amount)}",

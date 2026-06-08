@@ -14,7 +14,6 @@ class BudgetScreen extends StatefulWidget {
 
 class _BudgetScreenState extends State<BudgetScreen> {
   static const Color primaryGreen = Color(0xFF168A36);
-  static const Color softGreen = Color(0xFFEAF7EE);
   static const String totalBudgetCategory = "Tổng ngân sách";
 
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -199,14 +198,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
 
     return Scaffold(
-      backgroundColor: softGreen,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           "Ngân sách",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        backgroundColor: primaryGreen,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -389,6 +388,7 @@ class _BudgetTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final budgetAmount = budget?.amount;
     final hasBudget = budgetAmount != null;
     final progress = hasBudget ? (spent / budgetAmount).clamp(0.0, 1.0) : 0.0;
@@ -402,7 +402,7 @@ class _BudgetTile extends StatelessWidget {
     final remaining = hasBudget ? budgetAmount - spent : 0.0;
 
     return Card(
-      color: Colors.white,
+      color: theme.cardColor,
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -421,8 +421,8 @@ class _BudgetTile extends StatelessWidget {
                     child: Text(
                       category.name,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.black87,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -436,8 +436,10 @@ class _BudgetTile extends StatelessWidget {
                         Text.rich(
                           TextSpan(
                             text: isOverBudget ? "Vượt: " : "Còn lại: ",
-                            style: const TextStyle(
-                              color: Colors.black54,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.68,
+                              ),
                               fontSize: 13,
                             ),
                             children: [
@@ -446,7 +448,7 @@ class _BudgetTile extends StatelessWidget {
                                 style: TextStyle(
                                   color: isOverBudget
                                       ? Colors.red
-                                      : Colors.black87,
+                                      : theme.colorScheme.onSurface,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -458,14 +460,21 @@ class _BudgetTile extends StatelessWidget {
                         Text(
                           isOverBudget ? "Vượt ngân sách" : percentText,
                           style: TextStyle(
-                            color: isOverBudget ? Colors.red : Colors.black54,
+                            color: isOverBudget
+                                ? Colors.red
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.68,
+                                  ),
                             fontSize: 13,
                           ),
                         ),
                       ],
                     ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right, color: Colors.black38),
+                  Icon(
+                    Icons.chevron_right,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -475,7 +484,7 @@ class _BudgetTile extends StatelessWidget {
                   minHeight: 9,
                   value: progress,
                   color: progressColor,
-                  backgroundColor: _BudgetScreenState.softGreen,
+                  backgroundColor: theme.dividerColor,
                 ),
               ),
               const SizedBox(height: 8),
@@ -487,8 +496,10 @@ class _BudgetTile extends StatelessWidget {
                           ? "Ngân sách: ${formatMoney(budgetAmount)}"
                           : "Ngân sách: Chưa đặt",
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.black54,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.68,
+                        ),
                         fontSize: 13,
                       ),
                     ),
@@ -500,7 +511,11 @@ class _BudgetTile extends StatelessWidget {
                       textAlign: TextAlign.right,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isOverBudget ? Colors.red : Colors.black54,
+                        color: isOverBudget
+                            ? Colors.red
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.68,
+                              ),
                         fontSize: 13,
                         fontWeight: isOverBudget
                             ? FontWeight.w600
@@ -537,20 +552,24 @@ class _EmptyBudgetState extends StatelessWidget {
               size: 56,
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               "Bạn chưa thiết lập ngân sách cho tháng này",
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.black87,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               "Các danh mục chưa đặt sẽ chỉ xuất hiện trong phần cài đặt.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.68),
+              ),
             ),
             const SizedBox(height: 18),
             ElevatedButton(
