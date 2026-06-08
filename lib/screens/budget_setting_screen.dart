@@ -200,12 +200,11 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
     if (!context.mounted) return;
     if (scope == null) return;
 
-    await saveBudgetAmounts(
+    final saved = await saveBudgetAmounts(
       changedAmounts: {category: result <= 0 ? null : result},
       scope: scope,
     );
-    if (!context.mounted) return;
-    if (!mounted) return;
+    if (!mounted || !saved) return;
 
     setState(() {
       amounts[category] = result <= 0 ? null : result;
@@ -255,103 +254,113 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
     );
   }
 
-  Future<void> saveBudgetAmounts({
+  Future<bool> saveBudgetAmounts({
     required Map<String, double?> changedAmounts,
     required _BudgetSaveScope scope,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || isSaving) return;
+    if (user == null || isSaving) return false;
 
     setState(() {
       isSaving = true;
     });
 
-    final batch = FirebaseFirestore.instance.batch();
-    final budgets = FirebaseFirestore.instance.collection("budgets");
-    final settings = FirebaseFirestore.instance.collection("budget_settings");
-    final now = FieldValue.serverTimestamp();
-    final targetMonths = targetMonthsForScope(scope);
-    final changedCategoryNames = changedAmounts.keys.toList();
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      final budgets = FirebaseFirestore.instance.collection("budgets");
+      final settings = FirebaseFirestore.instance.collection("budget_settings");
+      final now = FieldValue.serverTimestamp();
+      final targetMonths = targetMonthsForScope(scope);
+      final changedCategoryNames = changedAmounts.keys.toList();
 
-    for (final monthDate in targetMonths) {
-      final budgetSnapshot = await budgets
-          .where("userId", isEqualTo: user.uid)
-          .where("month", isEqualTo: monthDate.month)
-          .where("year", isEqualTo: monthDate.year)
-          .get();
-      if (!context.mounted) return;
+      for (final monthDate in targetMonths) {
+        final budgetSnapshot = await budgets
+            .where("userId", isEqualTo: user.uid)
+            .where("month", isEqualTo: monthDate.month)
+            .where("year", isEqualTo: monthDate.year)
+            .get();
+        if (!mounted) return false;
 
-      final existingByCategory = <String, List<QueryDocumentSnapshot>>{};
+        final existingByCategory = <String, List<QueryDocumentSnapshot>>{};
 
-      for (final doc in budgetSnapshot.docs) {
-        final data = doc.data();
-        final category = data["category"]?.toString();
-        if (category == null) continue;
-        existingByCategory.putIfAbsent(category, () => []).add(doc);
-      }
-
-      for (final category in changedCategoryNames) {
-        final amount = changedAmounts[category] ?? 0;
-        final existingDocs = existingByCategory[category] ?? [];
-
-        if (amount <= 0) {
-          for (final doc in existingDocs) {
-            batch.delete(doc.reference);
-          }
-          continue;
+        for (final doc in budgetSnapshot.docs) {
+          final data = doc.data();
+          final category = data["category"]?.toString();
+          if (category == null) continue;
+          existingByCategory.putIfAbsent(category, () => []).add(doc);
         }
 
-        final data = {
+        for (final category in changedCategoryNames) {
+          final amount = changedAmounts[category] ?? 0;
+          final existingDocs = existingByCategory[category] ?? [];
+
+          if (amount <= 0) {
+            for (final doc in existingDocs) {
+              batch.delete(doc.reference);
+            }
+            continue;
+          }
+
+          final data = {
+            "userId": user.uid,
+            "category": category,
+            "amount": amount,
+            "month": monthDate.month,
+            "year": monthDate.year,
+            "type": category == totalBudgetCategory ? "total" : "category",
+            "updatedAt": now,
+          };
+
+          if (existingDocs.isEmpty) {
+            final doc = budgets.doc();
+            batch.set(doc, {...data, "createdAt": now});
+          } else {
+            batch.update(existingDocs.first.reference, data);
+            for (final duplicate in existingDocs.skip(1)) {
+              batch.delete(duplicate.reference);
+            }
+          }
+        }
+
+        final settingSnapshot = await settings
+            .where("userId", isEqualTo: user.uid)
+            .where("month", isEqualTo: monthDate.month)
+            .where("year", isEqualTo: monthDate.year)
+            .limit(1)
+            .get();
+        if (!mounted) return false;
+
+        final settingData = {
           "userId": user.uid,
-          "category": category,
-          "amount": amount,
           "month": monthDate.month,
           "year": monthDate.year,
-          "type": category == totalBudgetCategory ? "total" : "category",
+          "includeUnbudgetedExpenses": includeUnbudgetedExpenses,
           "updatedAt": now,
         };
 
-        if (existingDocs.isEmpty) {
-          final doc = budgets.doc();
-          batch.set(doc, {...data, "createdAt": now});
+        if (settingSnapshot.docs.isEmpty) {
+          batch.set(settings.doc(), settingData);
         } else {
-          batch.update(existingDocs.first.reference, data);
-          for (final duplicate in existingDocs.skip(1)) {
-            batch.delete(duplicate.reference);
-          }
+          batch.update(settingSnapshot.docs.first.reference, settingData);
         }
       }
 
-      final settingSnapshot = await settings
-          .where("userId", isEqualTo: user.uid)
-          .where("month", isEqualTo: monthDate.month)
-          .where("year", isEqualTo: monthDate.year)
-          .limit(1)
-          .get();
-      if (!context.mounted) return;
-
-      final settingData = {
-        "userId": user.uid,
-        "month": monthDate.month,
-        "year": monthDate.year,
-        "includeUnbudgetedExpenses": includeUnbudgetedExpenses,
-        "updatedAt": now,
-      };
-
-      if (settingSnapshot.docs.isEmpty) {
-        batch.set(settings.doc(), settingData);
-      } else {
-        batch.update(settingSnapshot.docs.first.reference, settingData);
+      await batch.commit();
+      return true;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Không thể lưu ngân sách: $error")),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSaving = false;
+        });
       }
     }
-
-    await batch.commit();
-    if (!context.mounted) return;
-    if (!mounted) return;
-
-    setState(() {
-      isSaving = false;
-    });
   }
 
   Future<void> saveSettings() async {
@@ -361,7 +370,11 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
     if (!context.mounted) return;
     if (scope == null) return;
 
-    await saveBudgetAmounts(changedAmounts: Map.of(amounts), scope: scope);
+    final saved = await saveBudgetAmounts(
+      changedAmounts: Map.of(amounts),
+      scope: scope,
+    );
+    if (!saved) return;
     final currentContext = context;
     if (!currentContext.mounted) return;
     final navigator = Navigator.of(currentContext);

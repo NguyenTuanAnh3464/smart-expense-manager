@@ -1,1 +1,36 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"smart-expense-manager-2253e","appId":"1:97111363348:android:b16da87f22763254b23c01","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"smart-expense-manager-2253e","configurations":{"android":"1:97111363348:android:b16da87f22763254b23c01","ios":"1:97111363348:ios:5b544acbbe8ac813b23c01","web":"1:97111363348:web:705e075917dd93bdb23c01","windows":"1:97111363348:web:42264260e9ec6643b23c01"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "smart-expense-manager-2253e",
+          "appId": "1:97111363348:android:b16da87f22763254b23c01",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smart-expense-manager-2253e",
+          "configurations": {
+            "android": "1:97111363348:android:b16da87f22763254b23c01",
+            "ios": "1:97111363348:ios:5b544acbbe8ac813b23c01",
+            "web": "1:97111363348:web:705e075917dd93bdb23c01",
+            "windows": "1:97111363348:web:42264260e9ec6643b23c01"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ]
+}

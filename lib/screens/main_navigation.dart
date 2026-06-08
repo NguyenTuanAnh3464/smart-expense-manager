@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'basic_setting_screen.dart';
 import 'budget_screen.dart';
 import 'calendar_screen.dart';
 import 'home_screen.dart';
+import 'more_screen.dart';
 import 'report_screen.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -17,14 +17,13 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int currentIndex = 0;
   static const Color primaryGreen = Color(0xFF168A36);
-  static const Color softGreen = Color(0xFFEAF7EE);
 
   final List<Widget> screens = const [
     HomeScreen(),
     CalendarScreen(),
     ReportScreen(),
     BudgetScreen(),
-    AccountPage(),
+    MoreScreen(),
   ];
 
   @override
@@ -37,37 +36,42 @@ class _MainNavigationState extends State<MainNavigation> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection("user_settings")
-        .doc(user.uid)
-        .get();
-    if (!context.mounted) return;
-    if (!snapshot.exists) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection("user_settings")
+          .doc(user.uid)
+          .get();
+      if (!mounted || !snapshot.exists) return;
 
-    final tab = snapshot.data()?["startupTab"]?.toString();
-    final nextIndex = switch (tab) {
-      "calendar" => 1,
-      "report" => 2,
-      "budget" => 3,
-      "more" => 4,
-      _ => 0,
-    };
+      final tab = snapshot.data()?["startupTab"]?.toString();
+      final nextIndex = switch (tab) {
+        "calendar" => 1,
+        "report" => 2,
+        "budget" => 3,
+        "more" => 4,
+        _ => 0,
+      };
 
-    setState(() {
-      currentIndex = nextIndex;
-    });
+      setState(() {
+        currentIndex = nextIndex;
+      });
+    } catch (_) {
+      // Keep the default home tab when settings cannot be loaded.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final navTheme = Theme.of(context).bottomNavigationBarTheme;
+
     return Scaffold(
       body: screens[currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: primaryGreen,
-        unselectedItemColor: Colors.grey,
+        backgroundColor: navTheme.backgroundColor,
+        selectedItemColor: navTheme.selectedItemColor ?? primaryGreen,
+        unselectedItemColor: navTheme.unselectedItemColor,
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
         elevation: 10,
         onTap: (index) {
@@ -90,74 +94,6 @@ class _MainNavigationState extends State<MainNavigation> {
             label: 'Ngân sách',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'Khác'),
-        ],
-      ),
-    );
-  }
-}
-
-class CalendarPage extends StatelessWidget {
-  const CalendarPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _MainNavigationState.softGreen,
-      appBar: AppBar(
-        title: const Text('Lịch'),
-        backgroundColor: _MainNavigationState.primaryGreen,
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Text('Màn hình lịch', style: TextStyle(fontSize: 24)),
-      ),
-    );
-  }
-}
-
-class AccountPage extends StatelessWidget {
-  const AccountPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _MainNavigationState.softGreen,
-      appBar: AppBar(
-        title: const Text('Khác'),
-        backgroundColor: _MainNavigationState.primaryGreen,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: ListTile(
-              leading: const Icon(
-                Icons.settings,
-                color: _MainNavigationState.primaryGreen,
-              ),
-              title: const Text(
-                'Cài đặt cơ bản',
-                style: TextStyle(
-                  color: Colors.black87,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const BasicSettingScreen(),
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );

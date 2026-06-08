@@ -1,12 +1,22 @@
+﻿import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'add_transaction_screen.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'login_screen.dart';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:intl/intl.dart';
+
+import '../models/account_model.dart';
+import '../models/transaction_model.dart';
+import '../models/user_profile_model.dart';
+import '../services/account_service.dart';
+import '../services/profile_service.dart';
+import '../services/transaction_service.dart';
+import '../widgets/category_icon_helper.dart';
+import '../widgets/transaction_style.dart';
+import 'transaction_search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,21 +26,29 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ProfileService profileService = ProfileService();
+  final AccountService accountService = AccountService();
+
   Widget summaryCard({
     required String title,
     required String amount,
     required IconData icon,
     required Color color,
   }) {
+    final theme = Theme.of(context);
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: theme.dividerColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
+              color: Colors.black.withValues(
+                alpha: theme.brightness == Brightness.dark ? 0.18 : 0.06,
+              ),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -47,7 +65,14 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.68,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     amount,
@@ -68,14 +93,16 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required VoidCallback onPressed,
   }) {
+    final theme = Theme.of(context);
+
     return Expanded(
       child: ElevatedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon),
         label: Text(title),
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.green,
+          backgroundColor: theme.cardColor,
+          foregroundColor: theme.colorScheme.primary,
           elevation: 1,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
@@ -86,49 +113,83 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final TransactionService transactionService = TransactionService();
+  StreamSubscription<List<TransactionModel>>? transactionSubscription;
 
   List<Map<String, dynamic>> transactions = [];
 
   @override
   void initState() {
     super.initState();
-    loadTransactions();
+    listenTransactions();
+    ensureDefaultAccount();
   }
 
-  Future<void> loadTransactions() async {
-    final user = FirebaseAuth.instance.currentUser;
+  @override
+  void dispose() {
+    transactionSubscription?.cancel();
+    super.dispose();
+  }
 
+  Future<void> ensureDefaultAccount() async {
+    try {
+      await accountService.ensureDefaultAccount();
+    } catch (_) {}
+  }
+
+  void listenTransactions() {
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final snapshot = await firestore
-        .collection("transactions")
-        .where("userId", isEqualTo: user.uid)
-        .get();
-
-    final data = snapshot.docs.map((doc) {
-      final item = doc.data();
-
-      return {...item, "id": doc.id, "date": item["date"].toDate()};
-    }).toList();
-
-    setState(() {
-      transactions = List<Map<String, dynamic>>.from(data);
-    });
+    transactionSubscription = transactionService.getTransactionsStream().listen(
+      (data) {
+        if (!mounted) return;
+        setState(() {
+          transactions = data.map(transactionToMap).toList();
+        });
+      },
+      onError: (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Không thể tải giao dịch: $error")),
+        );
+      },
+    );
   }
-
-  double get balance {
-    double total = 0;
-
-    for (var item in transactions) {
-      if (item["type"] == "income") {
-        total += (item["amount"] as num).toDouble();
-      } else {
-        total -= (item["amount"] as num).toDouble();
-      }
-    }
-
-    return total;
+  Map<String, dynamic> transactionToMap(TransactionModel transaction) {
+    return {
+      "id": transaction.id,
+      "userId": transaction.userId,
+      "category": transaction.category,
+      "amount": transaction.amount,
+      "note": transaction.note,
+      "type": transaction.type,
+      "date": transaction.date,
+      if (transaction.accountId != null) "accountId": transaction.accountId,
+      if (transaction.categoryId != null) "categoryId": transaction.categoryId,
+      if (transaction.categoryName != null)
+        "categoryName": transaction.categoryName,
+      if (transaction.categoryType != null)
+        "categoryType": transaction.categoryType,
+      if (transaction.categoryIconName != null)
+        "categoryIconName": transaction.categoryIconName,
+      if (transaction.categoryColorValue != null)
+        "categoryColorValue": transaction.categoryColorValue,
+      if (transaction.goalId != null) "goalId": transaction.goalId,
+      if (transaction.source != null) "source": transaction.source,
+      if (transaction.rawBankContent != null)
+        "rawBankContent": transaction.rawBankContent,
+      if (transaction.rawBankText != null) "rawBankText": transaction.rawBankText,
+      if (transaction.bankTransactionTime != null)
+        "bankTransactionTime": transaction.bankTransactionTime,
+      if (transaction.bankAccountNumber != null)
+        "bankAccountNumber": transaction.bankAccountNumber,
+      if (transaction.bankFee != null) "bankFee": transaction.bankFee,
+      if (transaction.balanceAfterFromBank != null)
+        "balanceAfterFromBank": transaction.balanceAfterFromBank,
+      if (transaction.bankImageUrl != null)
+        "bankImageUrl": transaction.bankImageUrl,
+    };
   }
 
   double get totalIncome {
@@ -163,17 +224,26 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+    if (!mounted) return;
 
     if (result != null) {
       final id = oldTransaction["id"];
 
-      if (id != null) {
-        await firestore.collection("transactions").doc(id).update(result);
-      }
+      try {
+        if (id != null) {
+          await transactionService.updateTransaction(id, result);
+        }
 
-      setState(() {
-        transactions[index] = {...result, "id": id};
-      });
+        if (!mounted) return;
+        setState(() {
+          transactions[index] = {...result, "id": id};
+        });
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Không thể sửa giao dịch: $error")),
+        );
+      }
     }
   }
 
@@ -182,13 +252,22 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(builder: (context) => AddTransactionScreen(type: type)),
     );
+    if (!mounted) return;
 
     if (result != null) {
-      await addTransactionToFirestore(result);
+      try {
+        final docId = await addTransactionToFirestore(result);
 
-      setState(() {
-        transactions.add(result);
-      });
+        if (!mounted) return;
+        setState(() {
+          transactions.add({...result, "id": docId});
+        });
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Không thể thêm giao dịch: $error")),
+        );
+      }
     }
   }
 
@@ -198,39 +277,64 @@ class _HomeScreenState extends State<HomeScreen> {
     return "${formatter.format(amount)} VNĐ";
   }
 
-  Future<void> addTransactionToFirestore(
+  String getVietnameseWeekday(DateTime date) {
+    switch (date.weekday) {
+      case DateTime.monday:
+        return "Thứ 2";
+      case DateTime.tuesday:
+        return "Thứ 3";
+      case DateTime.wednesday:
+        return "Thứ 4";
+      case DateTime.thursday:
+        return "Thứ 5";
+      case DateTime.friday:
+        return "Thứ 6";
+      case DateTime.saturday:
+        return "Thứ 7";
+      case DateTime.sunday:
+        return "CN";
+      default:
+        return "";
+    }
+  }
+
+  String formatDateWithWeekday(DateTime date) {
+    final day = date.day.toString().padLeft(2, "0");
+    final month = date.month.toString().padLeft(2, "0");
+    final year = date.year.toString();
+    return "$day/$month/$year (${getVietnameseWeekday(date)})";
+  }
+
+  Future<String?> addTransactionToFirestore(
     Map<String, dynamic> transaction,
   ) async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    if (user == null) return null;
 
-    await firestore.collection("transactions").add({
-      ...transaction,
-      "userId": user.uid,
-    });
+    final docRef = await transactionService.addTransaction(transaction);
+    return docRef.id;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("Smart Expense Manager"),
-        backgroundColor: Colors.green,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         actions: [
           IconButton(
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-
-              if (!context.mounted) return;
-
-              Navigator.pushReplacement(
+            tooltip: "Tìm kiếm",
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const TransactionSearchScreen(),
+                ),
               );
             },
-            icon: const Icon(Icons.logout),
           ),
         ],
       ),
@@ -262,19 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 child: Row(
                   children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
+                    userAvatar(),
 
                     const SizedBox(width: 12),
 
@@ -293,16 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           const SizedBox(height: 2),
 
-                          Text(
-                            FirebaseAuth.instance.currentUser?.email ??
-                                "No Email",
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          userIdentity(),
                         ],
                       ),
                     ),
@@ -320,14 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         const SizedBox(height: 2),
 
-                        Text(
-                          formatMoney(balance),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        defaultAccountBalance(),
                       ],
                     ),
                   ],
@@ -397,7 +473,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemCount: transactions.length,
                       itemBuilder: (context, index) {
                         final item = transactions[index];
-                        final isIncome = item["type"] == "income";
+                        final type = item["type"];
+                        final transactionColor = getTransactionColorFromData(
+                          type: type,
+                          categoryColorValue: item["categoryColorValue"],
+                        );
+                        final transactionDate = item["date"] is DateTime
+                            ? item["date"] as DateTime
+                            : DateTime.fromMillisecondsSinceEpoch(0);
+                        final noteText = item["note"].toString().trim().isEmpty
+                            ? "Không có ghi chú"
+                            : item["note"].toString();
 
                         return Slidable(
                           key: ValueKey(index),
@@ -405,19 +491,31 @@ class _HomeScreenState extends State<HomeScreen> {
                             motion: const StretchMotion(),
                             children: [
                               SlidableAction(
-                                onPressed: (context) async {
+                                onPressed: (_) async {
                                   final id = item["id"];
 
-                                  if (id != null) {
-                                    await firestore
-                                        .collection("transactions")
-                                        .doc(id)
-                                        .delete();
-                                  }
+                                  try {
+                                    if (id != null) {
+                                      await transactionService
+                                          .deleteTransaction(id);
+                                    }
 
-                                  setState(() {
-                                    transactions.removeAt(index);
-                                  });
+                                    if (!mounted) return;
+                                    setState(() {
+                                      transactions.removeAt(index);
+                                    });
+                                  } catch (error) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(
+                                      this.context,
+                                    ).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          "Không thể xóa giao dịch: $error",
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
@@ -440,10 +538,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 editTransaction(index);
                               },
                               leading: Icon(
-                                isIncome
-                                    ? Icons.account_balance_wallet
-                                    : Icons.shopping_bag,
-                                color: isIncome ? Colors.green : Colors.red,
+                                getTransactionIconFromData(
+                                  type: type,
+                                  categoryIconName: item["categoryIconName"]
+                                      ?.toString(),
+                                ),
+                                color: transactionColor,
                                 size: 30,
                               ),
                               title: Row(
@@ -451,7 +551,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Expanded(
                                     child: Text(
                                       item["category"],
-                                      style: const TextStyle(
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
@@ -459,27 +562,51 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   Text(
-                                    "${isIncome ? "+" : "-"}${formatMoney((item["amount"] as num).toDouble())}",
+                                    "${TransactionStyle.signFor(type)}${formatMoney((item["amount"] as num).toDouble())}",
                                     style: TextStyle(
-                                      color: isIncome
-                                          ? Colors.green
-                                          : Colors.red,
+                                      color: transactionColor,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
                                     ),
                                   ),
                                   const SizedBox(width: 4),
-                                  const Icon(
+                                  Icon(
                                     Icons.chevron_right,
-                                    color: Colors.grey,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.45),
                                   ),
                                 ],
                               ),
-                              subtitle: Text(
-                                item["note"].toString().isEmpty
-                                    ? "Không có ghi chú"
-                                    : item["note"],
-                                overflow: TextOverflow.ellipsis,
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    noteText,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.68),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    formatDateWithWeekday(transactionDate),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.55),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -492,4 +619,144 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget userIdentity() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return StreamBuilder<UserProfileModel?>(
+      stream: profileService.getProfileStream(),
+      builder: (context, snapshot) {
+        final profile = snapshot.data;
+        final profileName = profile?.name.trim();
+        final authName = user?.displayName?.trim();
+        final email = profile?.email.trim().isNotEmpty == true
+            ? profile!.email.trim()
+            : user?.email?.trim() ?? "";
+
+        final displayName =
+            profileName != null &&
+                profileName.isNotEmpty &&
+                profileName != "Người dùng"
+            ? profileName
+            : authName != null && authName.isNotEmpty
+            ? authName
+            : email.isNotEmpty
+            ? email
+            : "Người dùng";
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              displayName,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (email.isNotEmpty && email != displayName) ...[
+              const SizedBox(height: 2),
+              Text(
+                email,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget userAvatar() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return StreamBuilder<UserProfileModel?>(
+      stream: profileService.getProfileStream(),
+      builder: (context, snapshot) {
+        final profilePhoto = snapshot.data?.photoURL?.trim();
+        final authPhoto = user?.photoURL?.trim();
+        final photoUrl = profilePhoto?.isNotEmpty == true
+            ? profilePhoto
+            : authPhoto?.isNotEmpty == true
+            ? authPhoto
+            : null;
+
+        return _ProfileAvatar(photoUrl: photoUrl);
+      },
+    );
+  }
+
+  Widget defaultAccountBalance() {
+    return StreamBuilder<List<AccountModel>>(
+      stream: accountService.getAccountsStream(),
+      builder: (context, snapshot) {
+        final accounts = snapshot.data ?? const <AccountModel>[];
+        final defaultAccount = accounts.isEmpty
+            ? null
+            : accounts.firstWhere(
+                (account) => account.isDefault,
+                orElse: () => accounts.first,
+              );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              formatMoney(defaultAccount?.balance ?? 0),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (defaultAccount != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                defaultAccount.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
 }
+
+class _ProfileAvatar extends StatelessWidget {
+  final String? photoUrl;
+
+  const _ProfileAvatar({required this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photoUrl?.trim();
+
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: url == null || url.isEmpty
+          ? const Icon(Icons.person, color: Colors.white, size: 24)
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.person, color: Colors.white, size: 24);
+              },
+            ),
+    );
+  }
+}
+

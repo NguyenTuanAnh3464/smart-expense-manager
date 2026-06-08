@@ -1,8 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../models/account_model.dart';
+import '../models/saving_goal_model.dart';
+import '../models/transaction_model.dart';
+import '../services/account_service.dart';
+import '../services/notification_service.dart';
+import '../services/saving_goal_service.dart';
 import 'budget_setting_screen.dart';
 
 class BudgetScreen extends StatefulWidget {
@@ -14,8 +21,10 @@ class BudgetScreen extends StatefulWidget {
 
 class _BudgetScreenState extends State<BudgetScreen> {
   static const Color primaryGreen = Color(0xFF168A36);
-  static const Color softGreen = Color(0xFFEAF7EE);
   static const String totalBudgetCategory = "Tổng ngân sách";
+  final Set<String> notifiedWarningKeys = {};
+  final SavingGoalService savingGoalService = SavingGoalService();
+  final AccountService accountService = AccountService();
 
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
   final NumberFormat moneyFormatter = NumberFormat("#,###", "en_US");
@@ -85,12 +94,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
     return "${moneyFormatter.format(value)}đ";
   }
 
-  DateTime? parseDate(dynamic value) {
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    return null;
-  }
-
   bool isInCurrentMonth(DateTime date) {
     return date.year == currentMonth.year && date.month == currentMonth.month;
   }
@@ -115,7 +118,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
       final category = data["category"]?.toString();
       final amount = data["amount"];
 
-      if (category == null || amount is! num) continue;
+      if (category == null || amount is! num || amount <= 0) continue;
 
       result[category] = _BudgetData(
         id: doc.id,
@@ -134,13 +137,35 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
     for (final doc in snapshot.docs) {
       final data = doc.data() as Map<String, dynamic>;
-      final date = parseDate(data["date"]);
-      if (date == null || !isInCurrentMonth(date)) continue;
-      if (data["type"] != "expense") continue;
+      final transaction = TransactionModel.fromMap(data, id: doc.id);
+      if (!isInCurrentMonth(transaction.date) || !transaction.isExpense) {
+        continue;
+      }
 
-      final amount = (data["amount"] as num).toDouble();
-      final category = data["category"]?.toString() ?? "Khác";
+      result[transaction.category] =
+          (result[transaction.category] ?? 0) + transaction.amount;
+    }
 
+    return result;
+  }
+
+  Map<String, double> mapSavingTransfers(QuerySnapshot snapshot) {
+    final result = <String, double>{};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (TransactionModel.normalizeType(data["type"]?.toString()) !=
+          "saving") {
+        continue;
+      }
+      if (data["sourceBudgetMonth"] != currentMonth.month ||
+          data["sourceBudgetYear"] != currentMonth.year) {
+        continue;
+      }
+
+      final category = data["sourceBudgetCategory"]?.toString();
+      if (category == null || category.isEmpty) continue;
+      final amount = TransactionModel.parseAmount(data["amount"]);
       result[category] = (result[category] ?? 0) + amount;
     }
 
@@ -163,6 +188,73 @@ class _BudgetScreenState extends State<BudgetScreen> {
     });
   }
 
+  List<_BudgetWarning> buildWarnings({
+    required Map<String, double> expenses,
+    required Map<String, double> savingTransfers,
+    required Map<String, _BudgetData> budgets,
+    required double totalSpent,
+  }) {
+    final warnings = <_BudgetWarning>[];
+    final totalBudget = budgets[totalBudgetCategory];
+    if (totalBudget != null &&
+        totalBudget.amount > 0 &&
+        totalSpent > totalBudget.amount) {
+      warnings.add(
+        _BudgetWarning(
+          key: "total",
+          title: "Vượt tổng ngân sách",
+          message:
+              "Chi tiêu tháng này vượt ${formatMoney(totalSpent - totalBudget.amount)} so với tổng ngân sách.",
+        ),
+      );
+    }
+
+    final checkedCategories = <String>{
+      ...expenses.keys,
+      ...savingTransfers.keys,
+    };
+    for (final category in checkedCategories) {
+      final budget = budgets[category];
+      if (budget == null || budget.type != "category" || budget.amount <= 0) {
+        continue;
+      }
+      final usedAmount =
+          (expenses[category] ?? 0) + (savingTransfers[category] ?? 0);
+      if (usedAmount > budget.amount) {
+        warnings.add(
+          _BudgetWarning(
+            key: "category:$category",
+            title: "Vượt ngân sách $category",
+            message:
+                "Đã vượt ${formatMoney(usedAmount - budget.amount)} trong danh mục $category.",
+          ),
+        );
+      }
+    }
+
+    return warnings;
+  }
+
+  void notifyBudgetWarnings(String userId, List<_BudgetWarning> warnings) {
+    if (warnings.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final warning in warnings) {
+        final localKey =
+            "${currentMonth.year}-${currentMonth.month}-${warning.key}";
+        if (!notifiedWarningKeys.add(localKey)) continue;
+        NotificationService.instance.showBudgetWarning(
+          userId: userId,
+          year: currentMonth.year,
+          month: currentMonth.month,
+          key: warning.key,
+          title: warning.title,
+          body: warning.message,
+        );
+      }
+    });
+  }
+
   Stream<QuerySnapshot> budgetSettingStream(String userId) {
     return FirebaseFirestore.instance
         .collection("budget_settings")
@@ -180,13 +272,73 @@ class _BudgetScreenState extends State<BudgetScreen> {
         builder: (context) => BudgetSettingScreen(currentMonth: currentMonth),
       ),
     );
-    final currentContext = context;
-    if (!currentContext.mounted) return;
+    if (!mounted) return;
 
     if (saved == true) {
       ScaffoldMessenger.of(
-        currentContext,
+        context,
       ).showSnackBar(const SnackBar(content: Text("Đã lưu cài đặt ngân sách")));
+    }
+  }
+
+  Future<void> openTransferToGoalSheet({
+    required _BudgetCategory category,
+    _BudgetData? budget,
+    required double remainingAmount,
+  }) async {
+    try {
+      final goals = await savingGoalService.getGoalsOnce();
+      final accounts = await accountService.getAccountsOnce();
+      if (!mounted) return;
+
+      final activeGoals = goals
+          .where((goal) => goal.targetAmount > goal.currentAmount)
+          .toList();
+      if (activeGoals.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Chưa có mục tiêu tiết kiệm cần góp")),
+        );
+        return;
+      }
+
+      final request = await showModalBottomSheet<_SavingTransferRequest>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor:
+            Theme.of(context).bottomSheetTheme.backgroundColor ??
+            Theme.of(context).cardColor,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        builder: (_) => _SavingTransferSheet(
+          goals: activeGoals,
+          accounts: accounts,
+          remainingBudget: remainingAmount,
+          formatMoney: formatMoney,
+        ),
+      );
+      if (!mounted || request == null) return;
+
+      await savingGoalService.transferToGoal(
+        goalId: request.goalId,
+        accountId: request.accountId,
+        amount: request.amount,
+        maxBudgetAmount: remainingAmount,
+        budgetId: budget?.id,
+        sourceBudgetCategory: category.name,
+        budgetMonth: currentMonth.month,
+        budgetYear: currentMonth.year,
+        note: "Chuyển từ ngân sách ${category.name}",
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Đã chuyển tiền vào mục tiêu tiết kiệm")),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Không thể chuyển tiền: $error")),
+      );
     }
   }
 
@@ -199,14 +351,15 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
 
     return Scaffold(
-      backgroundColor: softGreen,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        toolbarHeight: 40,
         title: const Text(
           "Ngân sách",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        backgroundColor: primaryGreen,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -257,11 +410,24 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             false);
                   final budgets = mapBudgets(budgetSnapshot.data!);
                   final expenses = mapExpenses(transactionSnapshot.data!);
+                  final savingTransfers = mapSavingTransfers(
+                    transactionSnapshot.data!,
+                  );
+                  final totalSavingTransfers = savingTransfers.values
+                      .fold<double>(0, (total, amount) => total + amount);
                   final totalSpent = totalSpentForBudgetMode(
                     expenses: expenses,
                     budgets: budgets,
                     includeUnbudgetedExpenses: includeUnbudgeted,
                   );
+                  final totalUsed = totalSpent + totalSavingTransfers;
+                  final warnings = buildWarnings(
+                    expenses: expenses,
+                    savingTransfers: savingTransfers,
+                    budgets: budgets,
+                    totalSpent: totalUsed,
+                  );
+                  notifyBudgetWarnings(user.uid, warnings);
                   final visibleCategories = categories
                       .where((category) => budgets[category.name] != null)
                       .toList();
@@ -275,6 +441,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                         onPrevious: previousMonth,
                         onNext: nextMonth,
                       ),
+                      if (warnings.isNotEmpty)
+                        _BudgetWarningPanel(warnings: warnings),
                       if (visibleCategories.isEmpty)
                         Expanded(
                           child: _EmptyBudgetState(
@@ -292,13 +460,24 @@ class _BudgetScreenState extends State<BudgetScreen> {
                               final spent = category.isTotal
                                   ? totalSpent
                                   : (expenses[category.name] ?? 0);
+                              final transferredToSaving = category.isTotal
+                                  ? totalSavingTransfers
+                                  : (savingTransfers[category.name] ?? 0);
 
                               return _BudgetTile(
                                 category: category,
                                 budget: budget,
                                 spent: spent,
+                                transferredToSaving: transferredToSaving,
                                 formatMoney: formatMoney,
                                 onTap: openBudgetSettings,
+                                onTransferToGoal: (remaining) {
+                                  openTransferToGoalSheet(
+                                    category: category,
+                                    budget: budget,
+                                    remainingAmount: remaining,
+                                  );
+                                },
                               );
                             },
                           ),
@@ -332,11 +511,13 @@ class _MonthHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: _BudgetScreenState.primaryGreen,
-      padding: const EdgeInsets.fromLTRB(4, 10, 4, 14),
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
       child: Row(
         children: [
           IconButton(
             onPressed: onPrevious,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             icon: const Icon(Icons.chevron_left, color: Colors.white),
           ),
           Expanded(
@@ -349,7 +530,7 @@ class _MonthHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 26,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -357,15 +538,67 @@ class _MonthHeader extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   range,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  style: const TextStyle(color: Colors.white70, fontSize: 10),
                 ),
               ],
             ),
           ),
           IconButton(
             onPressed: onNext,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             icon: const Icon(Icons.chevron_right, color: Colors.white),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BudgetWarningPanel extends StatelessWidget {
+  final List<_BudgetWarning> warnings;
+
+  const _BudgetWarningPanel({required this.warnings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "Cảnh báo chi tiêu",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final warning in warnings.take(3))
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                warning.message,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -376,33 +609,42 @@ class _BudgetTile extends StatelessWidget {
   final _BudgetCategory category;
   final _BudgetData? budget;
   final double spent;
+  final double transferredToSaving;
   final String Function(double value) formatMoney;
   final VoidCallback onTap;
+  final ValueChanged<double> onTransferToGoal;
 
   const _BudgetTile({
     required this.category,
     required this.budget,
     required this.spent,
+    required this.transferredToSaving,
     required this.formatMoney,
     required this.onTap,
+    required this.onTransferToGoal,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final budgetAmount = budget?.amount;
-    final hasBudget = budgetAmount != null;
-    final progress = hasBudget ? (spent / budgetAmount).clamp(0.0, 1.0) : 0.0;
-    final isOverBudget = hasBudget && spent > budgetAmount;
+    final hasBudget = budgetAmount != null && budgetAmount > 0;
+    final usedAmount = spent + transferredToSaving;
+    final progress = hasBudget
+        ? (usedAmount / budgetAmount).clamp(0.0, 1.0)
+        : 0.0;
+    final isOverBudget = hasBudget && usedAmount > budgetAmount;
     final progressColor = isOverBudget
         ? Colors.red
         : _BudgetScreenState.primaryGreen;
     final percentText = hasBudget
-        ? "${(spent / budgetAmount * 100).toStringAsFixed(0)}%"
+        ? "${(usedAmount / budgetAmount * 100).toStringAsFixed(0)}%"
         : "-";
-    final remaining = hasBudget ? budgetAmount - spent : 0.0;
+    final remaining = hasBudget ? budgetAmount - usedAmount : 0.0;
+    final transferableAmount = remaining.clamp(0.0, double.infinity).toDouble();
 
     return Card(
-      color: Colors.white,
+      color: theme.cardColor,
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -421,8 +663,8 @@ class _BudgetTile extends StatelessWidget {
                     child: Text(
                       category.name,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.black87,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -436,8 +678,10 @@ class _BudgetTile extends StatelessWidget {
                         Text.rich(
                           TextSpan(
                             text: isOverBudget ? "Vượt: " : "Còn lại: ",
-                            style: const TextStyle(
-                              color: Colors.black54,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.68,
+                              ),
                               fontSize: 13,
                             ),
                             children: [
@@ -446,7 +690,7 @@ class _BudgetTile extends StatelessWidget {
                                 style: TextStyle(
                                   color: isOverBudget
                                       ? Colors.red
-                                      : Colors.black87,
+                                      : theme.colorScheme.onSurface,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -458,14 +702,21 @@ class _BudgetTile extends StatelessWidget {
                         Text(
                           isOverBudget ? "Vượt ngân sách" : percentText,
                           style: TextStyle(
-                            color: isOverBudget ? Colors.red : Colors.black54,
+                            color: isOverBudget
+                                ? Colors.red
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.68,
+                                  ),
                             fontSize: 13,
                           ),
                         ),
                       ],
                     ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right, color: Colors.black38),
+                  Icon(
+                    Icons.chevron_right,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -475,7 +726,7 @@ class _BudgetTile extends StatelessWidget {
                   minHeight: 9,
                   value: progress,
                   color: progressColor,
-                  backgroundColor: _BudgetScreenState.softGreen,
+                  backgroundColor: theme.dividerColor,
                 ),
               ),
               const SizedBox(height: 8),
@@ -487,8 +738,10 @@ class _BudgetTile extends StatelessWidget {
                           ? "Ngân sách: ${formatMoney(budgetAmount)}"
                           : "Ngân sách: Chưa đặt",
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.black54,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.68,
+                        ),
                         fontSize: 13,
                       ),
                     ),
@@ -496,16 +749,310 @@ class _BudgetTile extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Chi tiêu: ${formatMoney(spent)}",
+                      "Đã dùng: ${formatMoney(usedAmount)}",
                       textAlign: TextAlign.right,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isOverBudget ? Colors.red : Colors.black54,
+                        color: isOverBudget
+                            ? Colors.red
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.68,
+                              ),
                         fontSize: 13,
                         fontWeight: isOverBudget
                             ? FontWeight.w600
                             : FontWeight.normal,
                       ),
+                    ),
+                  ),
+                ],
+              ),
+              if (transferableAmount > 0) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => onTransferToGoal(transferableAmount),
+                    icon: const Icon(Icons.savings_outlined, size: 18),
+                    label: const Text("Chuyển vào mục tiêu"),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _BudgetScreenState.primaryGreen,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SavingTransferRequest {
+  final String goalId;
+  final String? accountId;
+  final double amount;
+
+  const _SavingTransferRequest({
+    required this.goalId,
+    required this.accountId,
+    required this.amount,
+  });
+}
+
+class _SavingTransferSheet extends StatefulWidget {
+  final List<SavingGoalModel> goals;
+  final List<AccountModel> accounts;
+  final double remainingBudget;
+  final String Function(double value) formatMoney;
+
+  const _SavingTransferSheet({
+    required this.goals,
+    required this.accounts,
+    required this.remainingBudget,
+    required this.formatMoney,
+  });
+
+  @override
+  State<_SavingTransferSheet> createState() => _SavingTransferSheetState();
+}
+
+class _SavingTransferSheetState extends State<_SavingTransferSheet> {
+  late final TextEditingController amountController;
+  String? selectedGoalId;
+  String? selectedAccountId;
+
+  @override
+  void initState() {
+    super.initState();
+    amountController = TextEditingController();
+    final goalsWithId = widget.goals.where((goal) => goal.id != null).toList();
+    selectedGoalId = goalsWithId.isEmpty ? null : goalsWithId.first.id;
+    if (widget.accounts.isNotEmpty) {
+      final defaultAccount = widget.accounts.where((account) => account.isDefault);
+      selectedAccountId = defaultAccount.isNotEmpty
+          ? defaultAccount.first.id
+          : widget.accounts.first.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    amountController.dispose();
+    super.dispose();
+  }
+
+  SavingGoalModel? get selectedGoal {
+    final id = selectedGoalId;
+    if (id == null) return null;
+    for (final goal in widget.goals) {
+      if (goal.id == id) return goal;
+    }
+    return null;
+  }
+
+  AccountModel? get selectedAccount {
+    final id = selectedAccountId;
+    if (id == null) return null;
+    for (final account in widget.accounts) {
+      if (account.id == id) return account;
+    }
+    return null;
+  }
+
+  double get maxTransferAmount {
+    final goal = selectedGoal;
+    if (goal == null) return 0;
+    final missingGoalAmount = goal.targetAmount - goal.currentAmount;
+    final accountBalance = selectedAccount?.balance ?? double.infinity;
+    final maxAmount = [
+      widget.remainingBudget,
+      missingGoalAmount,
+      accountBalance,
+    ].reduce((a, b) => a < b ? a : b);
+    return maxAmount.isFinite
+        ? maxAmount.clamp(0.0, double.infinity).toDouble()
+        : 0;
+  }
+
+  void save() {
+    final amount =
+        double.tryParse(amountController.text.replaceAll(",", "").trim()) ?? 0;
+    final goalId = selectedGoalId;
+    if (goalId == null || goalId.isEmpty) {
+      showError("Vui lòng chọn mục tiêu tiết kiệm");
+      return;
+    }
+    if (widget.accounts.isNotEmpty &&
+        (selectedAccountId == null || selectedAccountId!.isEmpty)) {
+      showError("Vui lòng chọn tài khoản tiền");
+      return;
+    }
+    if (amount <= 0) {
+      showError("Số tiền chuyển phải lớn hơn 0");
+      return;
+    }
+    if (amount > maxTransferAmount) {
+      showError(
+        "Số tiền chuyển tối đa là ${widget.formatMoney(maxTransferAmount)}",
+      );
+      return;
+    }
+    if (amount > maxTransferAmount) {
+      showError("Số tiền chuyển vượt quá mức tối đa");
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      _SavingTransferRequest(
+        goalId: goalId,
+        accountId: selectedAccountId,
+        amount: amount,
+      ),
+    );
+  }
+
+  void showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final goalsWithId = widget.goals.where((goal) => goal.id != null).toList();
+    final maxAmount = maxTransferAmount;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          10,
+          20,
+          MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                "Chuyển vào mục tiêu",
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 18),
+              DropdownButtonFormField<String>(
+                initialValue: selectedGoalId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: "Mục tiêu tiết kiệm",
+                  border: OutlineInputBorder(),
+                ),
+                items: goalsWithId
+                    .map(
+                      (goal) => DropdownMenuItem(
+                        value: goal.id,
+                        child: Text(
+                          "${goal.title} - còn ${widget.formatMoney(goal.targetAmount - goal.currentAmount)}",
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedGoalId = value;
+                  });
+                },
+              ),
+              if (widget.accounts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedAccountId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: "Tài khoản tiền",
+                    border: OutlineInputBorder(),
+                  ),
+                  items: widget.accounts
+                      .where((account) => account.id != null)
+                      .map(
+                        (account) => DropdownMenuItem(
+                          value: account.id,
+                          child: Text(
+                            "${account.name} - ${widget.formatMoney(account.balance)}",
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedAccountId = value;
+                    });
+                  },
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: "Số tiền muốn chuyển",
+                  suffixText: "đ",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Tối đa có thể chuyển: ${widget.formatMoney(maxAmount)}",
+                style: TextStyle(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.68),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Hủy"),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: maxAmount > 0 ? save : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _BudgetScreenState.primaryGreen,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text("Lưu"),
                     ),
                   ),
                 ],
@@ -537,20 +1084,24 @@ class _EmptyBudgetState extends StatelessWidget {
               size: 56,
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               "Bạn chưa thiết lập ngân sách cho tháng này",
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.black87,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               "Các danh mục chưa đặt sẽ chỉ xuất hiện trong phần cài đặt.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.68),
+              ),
             ),
             const SizedBox(height: 18),
             ElevatedButton(
@@ -601,5 +1152,17 @@ class _BudgetData {
     required this.id,
     required this.amount,
     required this.type,
+  });
+}
+
+class _BudgetWarning {
+  final String key;
+  final String title;
+  final String message;
+
+  const _BudgetWarning({
+    required this.key,
+    required this.title,
+    required this.message,
   });
 }

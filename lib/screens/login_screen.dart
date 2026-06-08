@@ -17,6 +17,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool isLoading = false;
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39,11 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => const MainNavigation(),
-        ),
+        MaterialPageRoute(builder: (context) => const MainNavigation()),
       );
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       String message = "Đăng nhập thất bại";
 
       if (e.code == "user-not-found") {
@@ -56,9 +62,9 @@ class _LoginScreenState extends State<LoginScreen> {
         message = "Email hoặc mật khẩu không đúng";
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -71,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -79,20 +85,20 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.account_balance_wallet,
                   size: 100,
-                  color: Colors.green,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
 
                 const SizedBox(height: 20),
 
-                const Text(
+                Text(
                   "Smart Expense Manager",
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
 
@@ -131,7 +137,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ElevatedButton(
                     onPressed: isLoading ? null : login,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -139,12 +146,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
-                      "Login",
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                      ),
-                    ),
+                            "Login",
+                            style: TextStyle(fontSize: 18, color: Colors.white),
+                          ),
                   ),
                 ),
 

@@ -1,0 +1,19 @@
+{
+  "name": "smart-expense-manager-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
