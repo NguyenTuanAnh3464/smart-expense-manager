@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/account_model.dart';
 import '../models/saving_goal_model.dart';
+import 'budget_service.dart';
 
 class SavingGoalService {
   final FirebaseFirestore _firestore;
@@ -129,6 +130,8 @@ class SavingGoalService {
       throw ArgumentError("Số tiền chuyển vượt quá ngân sách còn lại");
     }
 
+    final transferDate = DateTime.now();
+
     await _firestore.runTransaction((transaction) async {
       final goalRef = _goals.doc(goalId);
       final goalSnapshot = await transaction.get(goalRef);
@@ -195,7 +198,7 @@ class SavingGoalService {
         if (accountId != null && accountId.isNotEmpty) "accountId": accountId,
         "category": "Tiết kiệm",
         "amount": amount,
-        "date": Timestamp.fromDate(DateTime.now()),
+        "date": Timestamp.fromDate(transferDate),
         "note": transferNote,
         "type": "saving",
         "sourceBudgetCategory": sourceBudgetCategory,
@@ -213,7 +216,7 @@ class SavingGoalService {
         if (budgetId != null && budgetId.isNotEmpty) "budgetId": budgetId,
         if (accountId != null && accountId.isNotEmpty) "accountId": accountId,
         "amount": amount,
-        "date": Timestamp.fromDate(DateTime.now()),
+        "date": Timestamp.fromDate(transferDate),
         "note": transferNote,
         "sourceBudgetCategory": sourceBudgetCategory,
         "sourceBudgetMonth": budgetMonth,
@@ -221,6 +224,14 @@ class SavingGoalService {
         "createdAt": now,
       });
     });
+
+    try {
+      await BudgetService.checkBudgetAlert(
+        uid,
+        DateTime(budgetYear, budgetMonth),
+        category: sourceBudgetCategory,
+      );
+    } catch (_) {}
   }
 
   void _validate(SavingGoalModel goal) {

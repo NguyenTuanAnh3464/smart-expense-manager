@@ -176,6 +176,13 @@ class _HomeScreenState extends State<HomeScreen> {
       if (transaction.categoryColorValue != null)
         "categoryColorValue": transaction.categoryColorValue,
       if (transaction.goalId != null) "goalId": transaction.goalId,
+      if (transaction.budgetId != null) "budgetId": transaction.budgetId,
+      if (transaction.sourceBudgetCategory != null)
+        "sourceBudgetCategory": transaction.sourceBudgetCategory,
+      if (transaction.sourceBudgetMonth != null)
+        "sourceBudgetMonth": transaction.sourceBudgetMonth,
+      if (transaction.sourceBudgetYear != null)
+        "sourceBudgetYear": transaction.sourceBudgetYear,
       if (transaction.source != null) "source": transaction.source,
       if (transaction.rawBankContent != null)
         "rawBankContent": transaction.rawBankContent,
@@ -233,11 +240,6 @@ class _HomeScreenState extends State<HomeScreen> {
         if (id != null) {
           await transactionService.updateTransaction(id, result);
         }
-
-        if (!mounted) return;
-        setState(() {
-          transactions[index] = {...result, "id": id};
-        });
       } catch (error) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -256,12 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != null) {
       try {
-        final docId = await addTransactionToFirestore(result);
-
-        if (!mounted) return;
-        setState(() {
-          transactions.add({...result, "id": docId});
-        });
+        await addTransactionToFirestore(result);
       } catch (error) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -486,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             : item["note"].toString();
 
                         return Slidable(
-                          key: ValueKey(index),
+                          key: ValueKey(item["id"] ?? index),
                           endActionPane: ActionPane(
                             motion: const StretchMotion(),
                             children: [
@@ -499,11 +496,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                       await transactionService
                                           .deleteTransaction(id);
                                     }
-
-                                    if (!mounted) return;
-                                    setState(() {
-                                      transactions.removeAt(index);
-                                    });
                                   } catch (error) {
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(

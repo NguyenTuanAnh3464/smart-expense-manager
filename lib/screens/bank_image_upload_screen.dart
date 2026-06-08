@@ -94,20 +94,20 @@ class _BankImageUploadScreenState extends State<BankImageUploadScreen> {
         return;
       }
 
-      final deduplicated = _deduplicateTransactions(parsedTransactions);
+      final duplicateCheck = _findPossibleDuplicateCount(parsedTransactions);
       final warnings = <String>[
         "OCR local có thể đọc sai thông tin. Vui lòng kiểm tra kỹ trước khi lưu.",
         if (imagesWithoutTransactions > 0)
           "$imagesWithoutTransactions ảnh không có giao dịch đủ ngày và số tiền.",
-        if (deduplicated.duplicateCount > 0)
-          "Đã bỏ qua ${deduplicated.duplicateCount} giao dịch có thể bị trùng.",
+        if (duplicateCheck > 0)
+          "$duplicateCheck giao dịch có thể trùng nhau. App vẫn giữ lại để bạn kiểm tra trước khi lưu.",
       ];
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => BankTransactionReviewScreen(
-            transactions: deduplicated.transactions,
+            transactions: parsedTransactions,
             warnings: warnings,
           ),
         ),
@@ -129,22 +129,40 @@ class _BankImageUploadScreenState extends State<BankImageUploadScreen> {
   }
 
   void _debugPrintOcrText(String rawText) {
-    debugPrint("BankImageUpload OCR raw text was not parsed:");
+    if (!kDebugMode) return;
+    debugPrint("BankImageUpload OCR text was not parsed (redacted):");
+    final redacted = _redactSensitiveOcrText(rawText);
     const chunkSize = 800;
-    for (var start = 0; start < rawText.length; start += chunkSize) {
-      final end = (start + chunkSize).clamp(0, rawText.length);
-      debugPrint(rawText.substring(start, end));
+    for (var start = 0; start < redacted.length; start += chunkSize) {
+      final end = (start + chunkSize).clamp(0, redacted.length);
+      debugPrint(redacted.substring(start, end));
     }
   }
 
-  _DedupResult _deduplicateTransactions(
-    List<BankExtractedTransaction> transactions,
-  ) {
+  String _redactSensitiveOcrText(String rawText) {
+    return rawText
+        .replaceAllMapped(
+          RegExp(r'\b\d{6,}\b'),
+          (match) {
+            final value = match.group(0)!;
+            return "${value.substring(0, 2)}***${value.substring(value.length - 2)}";
+          },
+        )
+        .replaceAllMapped(
+          RegExp(
+            r'(noi dung|nội dung|content|remark|memo)\s*[:：]?\s*.{8,}',
+            caseSensitive: false,
+          ),
+          (match) => "${match.group(1)}: [redacted]",
+        );
+  }
+
+  int _findPossibleDuplicateCount(List<BankExtractedTransaction> transactions) {
     final seen = <String>{};
-    final unique = <BankExtractedTransaction>[];
     var duplicateCount = 0;
 
-    for (final transaction in transactions) {
+    for (var index = 0; index < transactions.length; index++) {
+      final transaction = transactions[index];
       final date = transaction.date ?? DateTime.now();
       final key = [
         date.year,
@@ -154,16 +172,13 @@ class _BankImageUploadScreenState extends State<BankImageUploadScreen> {
         transaction.type,
       ].join(":");
       if (seen.add(key)) {
-        unique.add(transaction);
+        continue;
       } else {
         duplicateCount++;
       }
     }
 
-    return _DedupResult(
-      transactions: unique,
-      duplicateCount: duplicateCount,
-    );
+    return duplicateCount;
   }
 
   void removeImageAt(int index) {
@@ -372,14 +387,4 @@ class _PickCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _DedupResult {
-  final List<BankExtractedTransaction> transactions;
-  final int duplicateCount;
-
-  const _DedupResult({
-    required this.transactions,
-    required this.duplicateCount,
-  });
 }

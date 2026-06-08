@@ -16,6 +16,10 @@ class TransactionModel {
   final String? categoryIconName;
   final int? categoryColorValue;
   final String? goalId;
+  final String? budgetId;
+  final String? sourceBudgetCategory;
+  final int? sourceBudgetMonth;
+  final int? sourceBudgetYear;
   final String? source;
   final String? rawBankContent;
   final String? rawBankText;
@@ -43,6 +47,10 @@ class TransactionModel {
     this.categoryIconName,
     this.categoryColorValue,
     this.goalId,
+    this.budgetId,
+    this.sourceBudgetCategory,
+    this.sourceBudgetMonth,
+    this.sourceBudgetYear,
     this.source,
     this.rawBankContent,
     this.rawBankText,
@@ -77,6 +85,10 @@ class TransactionModel {
     String? categoryIconName,
     int? categoryColorValue,
     String? goalId,
+    String? budgetId,
+    String? sourceBudgetCategory,
+    int? sourceBudgetMonth,
+    int? sourceBudgetYear,
     String? source,
     String? rawBankContent,
     String? rawBankText,
@@ -104,6 +116,10 @@ class TransactionModel {
       categoryIconName: categoryIconName ?? this.categoryIconName,
       categoryColorValue: categoryColorValue ?? this.categoryColorValue,
       goalId: goalId ?? this.goalId,
+      budgetId: budgetId ?? this.budgetId,
+      sourceBudgetCategory: sourceBudgetCategory ?? this.sourceBudgetCategory,
+      sourceBudgetMonth: sourceBudgetMonth ?? this.sourceBudgetMonth,
+      sourceBudgetYear: sourceBudgetYear ?? this.sourceBudgetYear,
       source: source ?? this.source,
       rawBankContent: rawBankContent ?? this.rawBankContent,
       rawBankText: rawBankText ?? this.rawBankText,
@@ -150,6 +166,10 @@ class TransactionModel {
         data["categoryColorValue"] ?? data["categoryColorHex"],
       ),
       goalId: _parseOptionalString(data["goalId"]),
+      budgetId: _parseOptionalString(data["budgetId"]),
+      sourceBudgetCategory: _parseOptionalString(data["sourceBudgetCategory"]),
+      sourceBudgetMonth: _parseOptionalInt(data["sourceBudgetMonth"]),
+      sourceBudgetYear: _parseOptionalInt(data["sourceBudgetYear"]),
       source: _parseOptionalString(data["source"]),
       rawBankContent: _parseOptionalString(data["rawBankContent"]),
       rawBankText: _parseOptionalString(data["rawBankText"]),
@@ -183,6 +203,11 @@ class TransactionModel {
       if (title != null) "title": title,
       if (accountId != null && accountId!.isNotEmpty) "accountId": accountId,
       if (goalId != null && goalId!.isNotEmpty) "goalId": goalId,
+      if (budgetId != null && budgetId!.isNotEmpty) "budgetId": budgetId,
+      if (sourceBudgetCategory != null && sourceBudgetCategory!.isNotEmpty)
+        "sourceBudgetCategory": sourceBudgetCategory,
+      if (sourceBudgetMonth != null) "sourceBudgetMonth": sourceBudgetMonth,
+      if (sourceBudgetYear != null) "sourceBudgetYear": sourceBudgetYear,
       if (source != null && source!.isNotEmpty) "source": source,
       if (rawBankContent != null && rawBankContent!.isNotEmpty)
         "rawBankContent": rawBankContent,

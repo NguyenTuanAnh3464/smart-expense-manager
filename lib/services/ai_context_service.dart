@@ -63,11 +63,22 @@ class AIContextService {
   }
 
   Future<List<Map<String, dynamic>>> _loadBudgets(String uid) async {
+    final now = DateTime.now();
+    final settingSnapshot = await _firestore
+        .collection("budget_settings")
+        .where("userId", isEqualTo: uid)
+        .where("month", isEqualTo: now.month)
+        .where("year", isEqualTo: now.year)
+        .limit(1)
+        .get();
+    final includeUnbudgetedExpenses = settingSnapshot.docs.isEmpty
+        ? true
+        : settingSnapshot.docs.first.data()["includeUnbudgetedExpenses"] !=
+              false;
     final snapshot = await _firestore
         .collection("budgets")
         .where("userId", isEqualTo: uid)
         .get();
-    final now = DateTime.now();
 
     return snapshot.docs
         .where((doc) {
@@ -82,6 +93,7 @@ class AIContextService {
             "month": data["month"],
             "year": data["year"],
             "type": data["type"],
+            "includeUnbudgetedExpenses": includeUnbudgetedExpenses,
           };
         })
         .toList();

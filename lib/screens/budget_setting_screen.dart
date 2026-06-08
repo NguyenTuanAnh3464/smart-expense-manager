@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../services/budget_service.dart';
+import '../widgets/category_icon_helper.dart';
+
 enum _BudgetSaveScope { currentMonth, currentAndFutureMonths }
 
 class BudgetSettingScreen extends StatefulWidget {
@@ -30,7 +33,18 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
   bool isSaving = false;
   String? settingId;
 
-  final List<_SettingCategory> categories = const [
+  final List<_SettingCategory> customCategories = [];
+
+  List<_SettingCategory> get categories {
+    final merged = <_SettingCategory>[];
+    final names = <String>{};
+    for (final category in [...defaultCategories, ...customCategories]) {
+      if (names.add(category.name)) merged.add(category);
+    }
+    return merged;
+  }
+
+  static const List<_SettingCategory> defaultCategories = [
     _SettingCategory(
       name: "Ăn uống",
       icon: Icons.restaurant,
@@ -148,6 +162,13 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
         .get();
     if (!context.mounted) return;
 
+    final customCategorySnapshot = await FirebaseFirestore.instance
+        .collection("categories")
+        .where("userId", isEqualTo: user.uid)
+        .where("type", isEqualTo: "expense")
+        .get();
+    if (!context.mounted) return;
+
     for (final doc in budgetSnapshot.docs) {
       final data = doc.data();
       final category = data["category"]?.toString();
@@ -172,6 +193,10 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
       settingId = doc.id;
       includeUnbudgetedExpenses = data["includeUnbudgetedExpenses"] != false;
     }
+
+    customCategories
+      ..clear()
+      ..addAll(_mapCustomCategories(customCategorySnapshot.docs));
 
     if (!mounted) return;
     setState(() {
@@ -346,6 +371,11 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
       }
 
       await batch.commit();
+      await _checkBudgetAlertsAfterSave(
+        user.uid,
+        targetMonths,
+        changedCategoryNames,
+      );
       return true;
     } catch (error) {
       if (mounted) {
@@ -359,6 +389,53 @@ class _BudgetSettingScreenState extends State<BudgetSettingScreen> {
         setState(() {
           isSaving = false;
         });
+      }
+    }
+  }
+
+  List<_SettingCategory> _mapCustomCategories(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final result = <_SettingCategory>[];
+    for (final doc in docs) {
+      final data = doc.data();
+      final name = data["name"]?.toString().trim();
+      if (name == null || name.isEmpty) continue;
+      result.add(
+        _SettingCategory(
+          name: name,
+          icon: getCategoryIcon(data["iconName"]?.toString()),
+          color: getCategoryColor(data["color"], fallback: primaryGreen),
+        ),
+      );
+    }
+    return result;
+  }
+
+  Future<void> _checkBudgetAlertsAfterSave(
+    String userId,
+    List<DateTime> targetMonths,
+    List<String> changedCategoryNames,
+  ) async {
+    for (final monthDate in targetMonths) {
+      final categoriesToCheck = changedCategoryNames
+          .where((category) => category != totalBudgetCategory)
+          .toSet();
+      if (categoriesToCheck.isEmpty) {
+        try {
+          await BudgetService.checkBudgetAlert(userId, monthDate);
+        } catch (_) {}
+        continue;
+      }
+
+      for (final category in categoriesToCheck) {
+        try {
+          await BudgetService.checkBudgetAlert(
+            userId,
+            monthDate,
+            category: category,
+          );
+        } catch (_) {}
       }
     }
   }

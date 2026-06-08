@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/account_model.dart';
 import '../models/transaction_model.dart';
+import 'budget_service.dart';
 
 class TransactionService {
   final FirebaseFirestore _firestore;
@@ -102,6 +103,7 @@ class TransactionService {
       }
     });
 
+    await _checkBudgetAlertSafely(uid, transaction, data);
     return docRef;
   }
 
@@ -109,6 +111,10 @@ class TransactionService {
     final uid = _requireUid();
     final newTransaction = TransactionModel.fromMap(data, fallbackUserId: uid);
     _validateTransaction(newTransaction, rawData: data);
+    TransactionModel? oldTransactionForAlert;
+    TransactionModel? newTransactionForAlert;
+    Map<String, dynamic>? oldDataForAlert;
+    Map<String, dynamic>? newDataForAlert;
 
     await _firestore.runTransaction((firestoreTransaction) async {
       final docRef = _transactions.doc(id);
@@ -118,6 +124,7 @@ class TransactionService {
       }
 
       final oldTransaction = TransactionModel.fromFirestore(oldSnapshot);
+      final oldData = oldSnapshot.data() ?? {};
       if (oldTransaction.userId != uid) {
         throw StateError("Bạn không có quyền sửa giao dịch này");
       }
@@ -185,11 +192,28 @@ class TransactionService {
         transactionId: id,
         transaction: effectiveNewTransaction,
       );
+      oldTransactionForAlert = oldTransaction;
+      newTransactionForAlert = effectiveNewTransaction;
+      oldDataForAlert = oldData;
+      newDataForAlert = payload;
     });
+
+    await _checkBudgetAlertSafely(
+      uid,
+      oldTransactionForAlert,
+      oldDataForAlert,
+    );
+    await _checkBudgetAlertSafely(
+      uid,
+      newTransactionForAlert,
+      newDataForAlert ?? data,
+    );
   }
 
   Future<void> deleteTransaction(String id) async {
     final uid = _requireUid();
+    TransactionModel? deletedTransactionForAlert;
+    Map<String, dynamic>? deletedDataForAlert;
 
     await _firestore.runTransaction((firestoreTransaction) async {
       final docRef = _transactions.doc(id);
@@ -197,6 +221,7 @@ class TransactionService {
       if (!snapshot.exists) return;
 
       final oldTransaction = TransactionModel.fromFirestore(snapshot);
+      final oldData = snapshot.data() ?? {};
       if (oldTransaction.userId != uid) {
         throw StateError("Bạn không có quyền xóa giao dịch này");
       }
@@ -219,7 +244,45 @@ class TransactionService {
         firestoreTransaction.delete(_contributions.doc(id));
       }
       firestoreTransaction.delete(docRef);
+      deletedTransactionForAlert = oldTransaction;
+      deletedDataForAlert = oldData;
     });
+
+    await _checkBudgetAlertSafely(
+      uid,
+      deletedTransactionForAlert,
+      deletedDataForAlert,
+    );
+  }
+
+  Future<void> _checkBudgetAlertSafely(
+    String uid,
+    TransactionModel? transaction,
+    Map<String, dynamic>? rawData,
+  ) async {
+    if (transaction == null) return;
+    final category = _budgetCategoryFor(transaction, rawData);
+    if (category == null && !transaction.isExpense && !transaction.isSaving) {
+      return;
+    }
+
+    try {
+      await BudgetService.checkBudgetAlert(
+        uid,
+        transaction.date,
+        category: category,
+      );
+    } catch (_) {}
+  }
+
+  String? _budgetCategoryFor(
+    TransactionModel transaction,
+    Map<String, dynamic>? rawData,
+  ) {
+    if (transaction.isExpense) return transaction.category;
+    if (!transaction.isSaving) return null;
+    final category = rawData?["sourceBudgetCategory"]?.toString().trim();
+    return category?.isNotEmpty == true ? category : null;
   }
 
   double _signedDelta(TransactionModel transaction) {

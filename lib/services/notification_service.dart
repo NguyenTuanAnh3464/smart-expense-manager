@@ -93,7 +93,13 @@ class NotificationService {
     await initialize();
     final prefs = await SharedPreferences.getInstance();
     final sentKey = "$_budgetWarningPrefix:$userId:$year:$month:$key";
-    if (prefs.getBool(sentKey) == true) return;
+    final today = _dateKey(DateTime.now());
+    final sentValue = prefs.get(sentKey);
+    if (sentValue == true) {
+      await prefs.remove(sentKey);
+    } else if (sentValue == today) {
+      return;
+    }
 
     await _plugin.show(
       id: _budgetWarningId + key.hashCode.abs() % 1000,
@@ -101,7 +107,25 @@ class NotificationService {
       body: body,
       notificationDetails: _warningDetails(),
     );
-    await prefs.setBool(sentKey, true);
+    await prefs.setString(sentKey, today);
+    await prefs.setString(
+      "$sentKey:lastAlertAt",
+      DateTime.now().toIso8601String(),
+    );
+  }
+
+  Future<void> resetBudgetWarning({
+    required String userId,
+    required int year,
+    required int month,
+    required String keyPrefix,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final suffix in ["80", "low", "100"]) {
+      final key = "$_budgetWarningPrefix:$userId:$year:$month:$keyPrefix:$suffix";
+      await prefs.remove(key);
+      await prefs.remove("$key:lastAlertAt");
+    }
   }
 
   NotificationDetails _reminderDetails() {
@@ -149,5 +173,11 @@ class NotificationService {
     final hour = int.tryParse(parts.first) ?? 22;
     final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
     return (hour: hour.clamp(0, 23), minute: minute.clamp(0, 59));
+  }
+
+  String _dateKey(DateTime date) {
+    final month = date.month.toString().padLeft(2, "0");
+    final day = date.day.toString().padLeft(2, "0");
+    return "${date.year}-$month-$day";
   }
 }

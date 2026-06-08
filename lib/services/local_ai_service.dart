@@ -2,6 +2,8 @@ import '../models/transaction_model.dart';
 import 'ai_context_service.dart';
 
 class LocalAIService {
+  static const String totalBudgetCategory = "Tổng ngân sách";
+
   Future<String> answerQuestion({
     required String question,
     required AIFinancialContext context,
@@ -50,14 +52,16 @@ class LocalAIService {
     }
 
     final stats = _calculateStats(transactions);
-    final balance = stats.totalIncome - stats.totalExpense;
+    final totalOutflow = stats.totalExpense + stats.totalSavingTransfer;
+    final balance = stats.totalIncome - totalOutflow;
     final comment = stats.totalIncome <= 0
         ? "Chưa có dữ liệu thu nhập, nên chưa thể đánh giá tỷ lệ chi tiêu."
-        : stats.totalExpense > stats.totalIncome * 0.7
-            ? "Mức chi tiêu đang khá cao so với thu nhập."
-            : "Mức chi tiêu hiện tại khá ổn.";
+        : totalOutflow > stats.totalIncome * 0.7
+        ? "Tổng tiền ra đang khá cao so với thu nhập."
+        : "Mức tiền ra hiện tại khá ổn.";
 
-    return "Tháng này bạn có tổng thu ${_money(stats.totalIncome)}, tổng chi ${_money(stats.totalExpense)}. "
+    return "Tháng này bạn có tổng thu ${_money(stats.totalIncome)}, chi tiêu sinh hoạt ${_money(stats.totalExpense)} "
+        "và tiền chuyển tiết kiệm ${_money(stats.totalSavingTransfer)}. "
         "Bạn ${balance >= 0 ? "còn dư" : "đang âm"} ${_money(balance.abs())}. "
         "Có ${transactions.length} giao dịch trong tháng. $comment";
   }
@@ -97,18 +101,20 @@ class LocalAIService {
       return "Chưa có dữ liệu thu nhập, nên chưa thể đánh giá tỷ lệ chi tiêu.";
     }
 
-    final balance = stats.totalIncome - stats.totalExpense;
+    final balance =
+        stats.totalIncome - stats.totalExpense - stats.totalSavingTransfer;
     final topCategory = _topExpenseCategory(stats.expenseByCategory);
     final suggestions = <String>[];
-    final ratio = stats.totalExpense / stats.totalIncome;
+    final ratio =
+        (stats.totalExpense + stats.totalSavingTransfer) / stats.totalIncome;
 
     if (ratio > 0.7) {
       suggestions.add(
-        "Chi tiêu đang vượt 70% thu nhập, bạn nên kiểm tra lại các khoản chi lớn.",
+        "Tổng chi tiêu sinh hoạt và tiền chuyển tiết kiệm đang vượt 70% thu nhập, bạn nên kiểm tra lại các khoản tiền ra lớn.",
       );
     } else if (ratio < 0.5) {
       suggestions.add(
-        "Bạn đang giữ chi tiêu dưới 50% thu nhập, đây là tín hiệu tốt.",
+        "Bạn đang giữ chi tiêu sinh hoạt và tiền chuyển tiết kiệm dưới 50% thu nhập, đây là tín hiệu tốt.",
       );
       if (balance > 0) {
         suggestions.add(
@@ -155,7 +161,10 @@ class LocalAIService {
       );
       if (category == null || category.isEmpty || budgetAmount <= 0) continue;
 
-      final spent = stats.expenseByCategory[category] ?? 0;
+      final spent = category == totalBudgetCategory
+          ? _totalBudgetUsed(stats, budgets)
+          : (stats.expenseByCategory[category] ?? 0) +
+                (stats.savingTransferByCategory[category] ?? 0);
       final remaining = budgetAmount - spent;
       final progress = budgetAmount <= 0 ? 0 : spent / budgetAmount * 100;
       final status = progress >= 100
@@ -164,7 +173,7 @@ class LocalAIService {
               ? "sắp vượt ngân sách"
               : "vẫn đang trong mức an toàn";
       lines.add(
-        "- $category: đã dùng ${progress.clamp(0, double.infinity).toStringAsFixed(0)}%, còn lại ${_money(remaining > 0 ? remaining : 0)}. Bạn $status.",
+        "- $category: đã dùng ${progress.clamp(0, double.infinity).toStringAsFixed(0)}%, gồm chi tiêu sinh hoạt và tiền chuyển tiết kiệm nếu có trừ ngân sách; còn lại ${_money(remaining > 0 ? remaining : 0)}. Bạn $status.",
       );
     }
 
@@ -186,7 +195,9 @@ class LocalAIService {
   _LocalStats _calculateStats(List<TransactionModel> transactions) {
     var totalIncome = 0.0;
     var totalExpense = 0.0;
+    var totalSavingTransfer = 0.0;
     final expenseByCategory = <String, double>{};
+    final savingTransferByCategory = <String, double>{};
 
     for (final transaction in transactions) {
       final type = TransactionModel.normalizeType(transaction.type);
@@ -202,14 +213,65 @@ class LocalAIService {
           (value) => value + transaction.amount,
           ifAbsent: () => transaction.amount,
         );
+      } else if (type == "saving") {
+        totalSavingTransfer += transaction.amount;
+        final sourceCategory = transaction.sourceBudgetCategory;
+        if (sourceCategory != null &&
+            sourceCategory.isNotEmpty &&
+            transaction.sourceBudgetMonth == transaction.date.month &&
+            transaction.sourceBudgetYear == transaction.date.year) {
+          savingTransferByCategory.update(
+            sourceCategory,
+            (value) => value + transaction.amount,
+            ifAbsent: () => transaction.amount,
+          );
+        } else if (sourceCategory != null && sourceCategory.isNotEmpty) {
+          final now = DateTime.now();
+          if (transaction.sourceBudgetMonth == now.month &&
+              transaction.sourceBudgetYear == now.year) {
+            savingTransferByCategory.update(
+              sourceCategory,
+              (value) => value + transaction.amount,
+              ifAbsent: () => transaction.amount,
+            );
+          }
+        }
       }
     }
 
     return _LocalStats(
       totalIncome: totalIncome,
       totalExpense: totalExpense,
+      totalSavingTransfer: totalSavingTransfer,
       expenseByCategory: expenseByCategory,
+      savingTransferByCategory: savingTransferByCategory,
     );
+  }
+
+  double _totalBudgetUsed(
+    _LocalStats stats,
+    List<Map<String, dynamic>> budgets,
+  ) {
+    final includeUnbudgeted = budgets.isEmpty
+        ? true
+        : budgets.first["includeUnbudgetedExpenses"] != false;
+    final totalSavingTransfer = stats.savingTransferByCategory.values
+        .fold<double>(0, (total, amount) => total + amount);
+    if (includeUnbudgeted) {
+      return stats.totalExpense + totalSavingTransfer;
+    }
+
+    final budgetedCategories = budgets
+        .where((budget) => budget["type"]?.toString() != "total")
+        .map((budget) => budget["category"]?.toString())
+        .whereType<String>()
+        .toSet();
+    final budgetedExpense = stats.expenseByCategory.entries.fold<double>(
+      0,
+      (total, entry) =>
+          budgetedCategories.contains(entry.key) ? total + entry.value : total,
+    );
+    return budgetedExpense + totalSavingTransfer;
   }
 
   MapEntry<String, double>? _topExpenseCategory(
@@ -269,11 +331,15 @@ class LocalAIService {
 class _LocalStats {
   final double totalIncome;
   final double totalExpense;
+  final double totalSavingTransfer;
   final Map<String, double> expenseByCategory;
+  final Map<String, double> savingTransferByCategory;
 
   const _LocalStats({
     required this.totalIncome,
     required this.totalExpense,
+    required this.totalSavingTransfer,
     required this.expenseByCategory,
+    required this.savingTransferByCategory,
   });
 }

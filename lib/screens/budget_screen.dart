@@ -8,8 +8,8 @@ import '../models/account_model.dart';
 import '../models/saving_goal_model.dart';
 import '../models/transaction_model.dart';
 import '../services/account_service.dart';
-import '../services/notification_service.dart';
 import '../services/saving_goal_service.dart';
+import '../widgets/category_icon_helper.dart';
 import 'budget_setting_screen.dart';
 
 class BudgetScreen extends StatefulWidget {
@@ -22,14 +22,13 @@ class BudgetScreen extends StatefulWidget {
 class _BudgetScreenState extends State<BudgetScreen> {
   static const Color primaryGreen = Color(0xFF168A36);
   static const String totalBudgetCategory = "Tổng ngân sách";
-  final Set<String> notifiedWarningKeys = {};
   final SavingGoalService savingGoalService = SavingGoalService();
   final AccountService accountService = AccountService();
 
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
   final NumberFormat moneyFormatter = NumberFormat("#,###", "en_US");
 
-  final List<_BudgetCategory> categories = const [
+  static const List<_BudgetCategory> defaultCategories = [
     _BudgetCategory(
       name: totalBudgetCategory,
       icon: Icons.account_balance_wallet,
@@ -81,6 +80,35 @@ class _BudgetScreenState extends State<BudgetScreen> {
     _BudgetCategory(name: "Tiền nhà", icon: Icons.home, color: Colors.brown),
     _BudgetCategory(name: "Khác", icon: Icons.more_horiz, color: Colors.grey),
   ];
+
+  Stream<QuerySnapshot> categoryStream(String userId) {
+    return FirebaseFirestore.instance
+        .collection("categories")
+        .where("userId", isEqualTo: userId)
+        .where("type", isEqualTo: "expense")
+        .snapshots();
+  }
+
+  List<_BudgetCategory> mapCategories(QuerySnapshot snapshot) {
+    final merged = <_BudgetCategory>[];
+    final names = <String>{};
+    for (final category in defaultCategories) {
+      if (names.add(category.name)) merged.add(category);
+    }
+    for (final doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final name = data["name"]?.toString().trim();
+      if (name == null || name.isEmpty || !names.add(name)) continue;
+      merged.add(
+        _BudgetCategory(
+          name: name,
+          icon: getCategoryIcon(data["iconName"]?.toString()),
+          color: getCategoryColor(data["color"], fallback: primaryGreen),
+        ),
+      );
+    }
+    return merged;
+  }
 
   DateTime get firstDayOfMonth {
     return DateTime(currentMonth.year, currentMonth.month, 1);
@@ -233,26 +261,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
     }
 
     return warnings;
-  }
-
-  void notifyBudgetWarnings(String userId, List<_BudgetWarning> warnings) {
-    if (warnings.isEmpty) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      for (final warning in warnings) {
-        final localKey =
-            "${currentMonth.year}-${currentMonth.month}-${warning.key}";
-        if (!notifiedWarningKeys.add(localKey)) continue;
-        NotificationService.instance.showBudgetWarning(
-          userId: userId,
-          year: currentMonth.year,
-          month: currentMonth.month,
-          key: warning.key,
-          title: warning.title,
-          body: warning.message,
-        );
-      }
-    });
   }
 
   Stream<QuerySnapshot> budgetSettingStream(String userId) {
@@ -408,81 +416,95 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                   dynamic
                                 >)["includeUnbudgetedExpenses"] !=
                             false);
-                  final budgets = mapBudgets(budgetSnapshot.data!);
-                  final expenses = mapExpenses(transactionSnapshot.data!);
-                  final savingTransfers = mapSavingTransfers(
-                    transactionSnapshot.data!,
-                  );
-                  final totalSavingTransfers = savingTransfers.values
-                      .fold<double>(0, (total, amount) => total + amount);
-                  final totalSpent = totalSpentForBudgetMode(
-                    expenses: expenses,
-                    budgets: budgets,
-                    includeUnbudgetedExpenses: includeUnbudgeted,
-                  );
-                  final totalUsed = totalSpent + totalSavingTransfers;
-                  final warnings = buildWarnings(
-                    expenses: expenses,
-                    savingTransfers: savingTransfers,
-                    budgets: budgets,
-                    totalSpent: totalUsed,
-                  );
-                  notifyBudgetWarnings(user.uid, warnings);
-                  final visibleCategories = categories
-                      .where((category) => budgets[category.name] != null)
-                      .toList();
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: categoryStream(user.uid),
+                    builder: (context, categorySnapshot) {
+                      if (!categorySnapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                  return Column(
-                    children: [
-                      _MonthHeader(
-                        title: DateFormat("MM/yyyy").format(currentMonth),
-                        range:
-                            "(${DateFormat("dd/MM").format(firstDayOfMonth)} - ${DateFormat("dd/MM").format(lastDayOfMonth)})",
-                        onPrevious: previousMonth,
-                        onNext: nextMonth,
-                      ),
-                      if (warnings.isNotEmpty)
-                        _BudgetWarningPanel(warnings: warnings),
-                      if (visibleCategories.isEmpty)
-                        Expanded(
-                          child: _EmptyBudgetState(
-                            onSetupPressed: openBudgetSettings,
+                      final budgets = mapBudgets(budgetSnapshot.data!);
+                      final expenses = mapExpenses(transactionSnapshot.data!);
+                      final savingTransfers = mapSavingTransfers(
+                        transactionSnapshot.data!,
+                      );
+                      final totalSavingTransfers = savingTransfers.values
+                          .fold<double>(0, (total, amount) => total + amount);
+                      final totalSpent = totalSpentForBudgetMode(
+                        expenses: expenses,
+                        budgets: budgets,
+                        includeUnbudgetedExpenses: includeUnbudgeted,
+                      );
+                      final totalUsed = totalSpent + totalSavingTransfers;
+                      final warnings = buildWarnings(
+                        expenses: expenses,
+                        savingTransfers: savingTransfers,
+                        budgets: budgets,
+                        totalSpent: totalUsed,
+                      );
+                      final categories = mapCategories(categorySnapshot.data!);
+                      final visibleCategories = categories
+                          .where((category) => budgets[category.name] != null)
+                          .toList();
+
+                      return Column(
+                        children: [
+                          _MonthHeader(
+                            title: DateFormat("MM/yyyy").format(currentMonth),
+                            range:
+                                "(${DateFormat("dd/MM").format(firstDayOfMonth)} - ${DateFormat("dd/MM").format(lastDayOfMonth)})",
+                            onPrevious: previousMonth,
+                            onNext: nextMonth,
                           ),
-                        )
-                      else
-                        Expanded(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                            itemCount: visibleCategories.length,
-                            itemBuilder: (context, index) {
-                              final category = visibleCategories[index];
-                              final budget = budgets[category.name];
-                              final spent = category.isTotal
-                                  ? totalSpent
-                                  : (expenses[category.name] ?? 0);
-                              final transferredToSaving = category.isTotal
-                                  ? totalSavingTransfers
-                                  : (savingTransfers[category.name] ?? 0);
+                          if (warnings.isNotEmpty)
+                            _BudgetWarningPanel(warnings: warnings),
+                          if (visibleCategories.isEmpty)
+                            Expanded(
+                              child: _EmptyBudgetState(
+                                onSetupPressed: openBudgetSettings,
+                              ),
+                            )
+                          else
+                            Expanded(
+                              child: ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  8,
+                                  16,
+                                  20,
+                                ),
+                                itemCount: visibleCategories.length,
+                                itemBuilder: (context, index) {
+                                  final category = visibleCategories[index];
+                                  final budget = budgets[category.name];
+                                  final spent = category.isTotal
+                                      ? totalSpent
+                                      : (expenses[category.name] ?? 0);
+                                  final transferredToSaving = category.isTotal
+                                      ? totalSavingTransfers
+                                      : (savingTransfers[category.name] ?? 0);
 
-                              return _BudgetTile(
-                                category: category,
-                                budget: budget,
-                                spent: spent,
-                                transferredToSaving: transferredToSaving,
-                                formatMoney: formatMoney,
-                                onTap: openBudgetSettings,
-                                onTransferToGoal: (remaining) {
-                                  openTransferToGoalSheet(
+                                  return _BudgetTile(
                                     category: category,
                                     budget: budget,
-                                    remainingAmount: remaining,
+                                    spent: spent,
+                                    transferredToSaving: transferredToSaving,
+                                    formatMoney: formatMoney,
+                                    onTap: openBudgetSettings,
+                                    onTransferToGoal: (remaining) {
+                                      openTransferToGoalSheet(
+                                        category: category,
+                                        budget: budget,
+                                        remainingAmount: remaining,
+                                      );
+                                    },
                                   );
                                 },
-                              );
-                            },
-                          ),
-                        ),
-                    ],
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   );
                 },
               );
