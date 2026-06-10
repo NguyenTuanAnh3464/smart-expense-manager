@@ -1,5 +1,5 @@
 ﻿import 'dart:async';
-
+import 'bank_image_upload_screen.dart';
 import 'package:flutter/material.dart';
 import 'add_transaction_screen.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -248,6 +248,14 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
   }
+  void openBankImageScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const BankImageUploadScreen(),
+      ),
+    );
+  }
 
   Future<void> openAddTransaction(String type) async {
     final result = await Navigator.push(
@@ -318,6 +326,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: "Đọc ảnh giao dịch",
+          icon: const Icon(
+            Icons.document_scanner_outlined,
+            color: Colors.white,
+          ),
+          onPressed: openBankImageScanner,
+        ),
         title: const Text("Smart Expense Manager"),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         actions: [
